@@ -145,32 +145,32 @@ def calculate_ab(input_data: dict) -> ABTestOutput:
     decision_path = [
         {
             "step": "Input validation",
-            "passed": c_total > 0 and v_total > 0,
-            "details": {"control_total": c_total, "variant_total": v_total}
+            "passed": bool(c_total > 0 and v_total > 0),
+            "details": {"control_total": int(c_total), "variant_total": int(v_total)}
         },
         {
             "step": "Traffic check",
-            "passed": c_total >= min_sample and v_total >= min_sample,
-            "details": {"control_size": c_total, "variant_size": v_total, "min_required": min_sample},
-            "warning": f"Traffic low" if c_total < min_sample or v_total < min_sample else None,
+            "passed": bool(c_total >= min_sample and v_total >= min_sample),
+            "details": {"control_size": int(c_total), "variant_size": int(v_total), "min_required": int(min_sample)},
+            "warning": f"Traffic low" if bool(c_total < min_sample or v_total < min_sample) else None,
             "severity": "warning"
         },
         {
             "step": "Conversion rate calculation",
             "passed": True,
-            "details": {"control_rate": round(p_c, 6), "variant_rate": round(p_v, 6)}
+            "details": {"control_rate": float(round(p_c, 6)), "variant_rate": float(round(p_v, 6))}
         },
         {
             "step": "Statistical significance test",
-            "passed": p_value < alpha,
-            "details": {"p_value": round(p_value, 6), "alpha": alpha, "z_score": round(z, 4)},
+            "passed": bool(p_value < alpha),
+            "details": {"p_value": float(round(p_value, 6)), "alpha": float(alpha), "z_score": float(round(z, 4))},
             "warning": f"p={p_value:.4f} >= {alpha}" if p_value >= alpha else None,
             "severity": "info"
         },
         {
             "step": "Effect size check",
-            "passed": abs(lift) >= 1,
-            "details": {"lift_pct": round(lift, 4), "threshold": 1},
+            "passed": bool(abs(lift) >= 1),
+            "details": {"lift_pct": float(round(lift, 4)), "threshold": 1},
             "warning": f"Effect small ({lift:.2f}%)" if abs(lift) < 1 else None,
             "severity": "info"
         },

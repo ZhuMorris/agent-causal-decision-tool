@@ -362,7 +362,7 @@ def format_audit_text(audit: dict) -> str:
         lines.append(f"{i+1}. {step['step']} [{status}]")
         for k, v in step["details"].items():
             lines.append(f"   {k}: {v}")
-        if step["warning"]:
+        if step.get("warning"):
             lines.append(f"   WARNING: {step['warning']}")
         lines.append("")
     

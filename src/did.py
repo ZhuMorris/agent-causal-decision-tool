@@ -157,6 +157,57 @@ def calculate_did(input_data: dict) -> DIDOutput:
         "observation_size": "aggregate (no individual counts)",
         "computed_stats": list(stats_output.keys()),
         "assumptions_applied": assumptions,
+        "decision_path": [
+            {
+                "step": "Input validation",
+                "passed": pre_c > 0 and pre_t > 0,
+                "details": {"pre_control": pre_c, "pre_treated": pre_t},
+                "warning": "Zero baseline" if pre_c == 0 or pre_t == 0 else None,
+                "severity": "critical" if pre_c == 0 or pre_t == 0 else "info"
+            },
+            {
+                "step": "DiD estimation",
+                "passed": True,
+                "details": {
+                    "control_change": round(control_change, 4),
+                    "treatment_change": round(treat_effect, 4),
+                    "did_estimate": round(did_estimate, 4),
+                    "relative_did_pct": round(relative_did, 4)
+                }
+            },
+            {
+                "step": "Parallel trends check",
+                "passed": ratio_diff <= 0.2,
+                "details": {
+                    "control_ratio_post_pre": round(ctrl_ratio, 4),
+                    "treatment_ratio_post_pre": round(treat_ratio, 4),
+                    "ratio_difference": round(ratio_diff, 4),
+                    "threshold": 0.2
+                },
+                "warning": f"Trends diverge ({round(ratio_diff, 2)} > 0.2)" if ratio_diff > 0.2 else None,
+                "severity": "warning" if ratio_diff > 0.2 else "info"
+            },
+            {
+                "step": "Effect magnitude check",
+                "passed": abs(relative_did) >= 5,
+                "details": {
+                    "relative_did_pct": round(relative_did, 4),
+                    "thresholds": {"strong_positive": ">10%", "strong_negative": "<-10%", "small": "<5%"},
+                    "is_small": abs(relative_did) < 5
+                },
+                "warning": f"Small effect ({round(relative_did, 2)}%)" if abs(relative_did) < 5 else None,
+                "severity": "info"
+            },
+            {
+                "step": "Decision",
+                "passed": True,
+                "details": {
+                    "decision": decision,
+                    "confidence": confidence,
+                    "reason": summary
+                }
+            }
+        ],
         "limitations": [
             "No standard errors from aggregate data",
             "Parallel trends not formally tested",

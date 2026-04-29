@@ -2,27 +2,25 @@
 
 A causal decision and audit tool for AI agents. Evaluate product changes using A/B testing and Difference-in-Differences methods.
 
-## Features
-
-- **A/B Testing**: Randomized experiment analysis with statistical significance
-- **Difference-in-Differences**: Observational rollout analysis when A/B testing isn't feasible
-- **Structured Output**: Machine-readable JSON recommendations
-- **Audit Trail**: Complete record of inputs, statistics, thresholds, and warnings
-- **Agent-Native**: Designed for AI agent workflows, not human dashboards
-
 ## Installation
 
+### Via pip (Python package)
+
 ```bash
-# Clone
-git clone https://github.com/your-repo/agent-causal-decision-tool.git
-cd agent-causal-decision-tool
+pip install agent-causal-decision-tool
+```
 
-# Install
-pip install -e .
+### Via GitHub
 
-# Or build from source
-pip install build
-python -m build
+```bash
+pip install git+https://github.com/ZhuMorris/agent-causal-decision-tool.git
+```
+
+### Via OpenClaw Skill
+
+Install as an OpenClaw skill:
+```bash
+clawhub install agent-causal
 ```
 
 ## Usage
@@ -30,88 +28,58 @@ python -m build
 ### A/B Test Analysis
 
 ```bash
-# Using command-line arguments
+# Using CLI
 agent-causal ab --control 100/5000 --variant 130/5000
 
-# Using JSON input
-agent-causal ab < examples/ab_sample.json
-
-# Pretty text output
-agent-causal ab --control 100/5000 --variant 130/5000 --format text
+# Or using JSON input
+python3 -m src.cli ab --control 100/5000 --variant 130/5000 --format text
 ```
+
+**Parameters:**
+- `--control`: Control group in format `conversions/total` (e.g., `100/5000`)
+- `--variant`: Variant group in format `conversions/total` (e.g., `130/5000`)
+- `--name`: Variant name (optional)
+- `--format`: Output format `json` (default) or `text`
 
 ### Difference-in-Differences
 
 ```bash
-agent-causal did \
-  --pre-control 1000 \
-  --post-control 1100 \
-  --pre-treated 900 \
-  --post-treated 1150
+python3 -m src.cli did \
+  --pre-control 1000 --post-control 1100 \
+  --pre-treated 900 --post-treated 1150
 ```
 
-### Audit Mode
+### Decision Audit
 
 ```bash
-agent-causal audit previous_result.json
-```
+# Save result first
+python3 -m src.cli ab --control 100/5000 --variant 130/5000 > result.json
 
-## Input Schema
-
-### A/B Test Input
-
-```json
-{
-  "control_conversions": 100,
-  "control_total": 5000,
-  "variant_conversions": 130,
-  "variant_total": 5000,
-  "variant_name": "variant_1"
-}
-```
-
-### DiD Input
-
-```json
-{
-  "pre_control": 1000,
-  "post_control": 1100,
-  "pre_treated": 900,
-  "post_treated": 1150
-}
+# Then audit it
+python3 -m src.cli audit result.json --format text
 ```
 
 ## Output Schema
 
 Every output includes:
-
 - **recommendation**: Decision (ship/keep_running/reject/escalate) + confidence + summary
 - **statistics**: Computed metrics (rates, p-value, lift, confidence intervals)
 - **traffic_stats**: Sample sizes
-- **warnings**: Any issues detected (low traffic, small effects, assumption violations)
+- **warnings**: Any issues detected (low traffic, small effects, etc.)
 - **next_steps**: Suggested actions based on decision
-- **audit**: Full audit trail for downstream review
+- **audit**: Complete decision_path with step-by-step reasoning
 - **inputs**: Original inputs preserved for reproducibility
 
-## Decision Logic
+## Decision Reference
 
-| Decision | When |
-|----------|------|
-| `ship` | p < 0.05 and positive lift |
-| `keep_running` | p < 0.3 but not significant, trending positive |
-| `reject` | p < 0.05 and negative lift |
-| `escalate` | Not conclusive, or critical warnings |
+| Decision | Meaning | When |
+|----------|---------|------|
+| `ship` | Deploy variant | p < 0.05 AND positive lift |
+| `keep_running` | Continue experiment | p < 0.3, trending positive |
+| `reject` | Do not deploy | p < 0.05 AND negative lift |
+| `escalate` | Needs human review | Not conclusive or critical warnings |
 
-## Warnings
-
-- `LOW_TRAFFIC`: Sample size below recommended minimum (1000 per group)
-- `SMALL_EFFECT`: Lift < 1%, may not be practically significant
-- `INCONCLUSIVE`: p-value between 0.05 and 0.3, needs more data
-- `TRENDS_DIVERGE`: DiD parallel trends assumption may not hold
-
-## For AI Agents
-
-This tool is designed to be called programmatically from agent workflows:
+## Python API
 
 ```python
 from agent_causal_decision_tool import calculate_ab
@@ -124,10 +92,29 @@ result = calculate_ab({
 })
 
 if result.recommendation.decision == "ship":
-    # deploy variant
+    # Deploy variant
     pass
+```
+
+## Development
+
+```bash
+# Clone
+git clone https://github.com/ZhuMorris/agent-causal-decision-tool.git
+cd agent-causal-decision-tool
+
+# Install dependencies
+pip install -e .
+
+# Run tests
+pytest tests/ -v
+
+# Run CLI
+PYTHONPATH=. python3 -m src.cli ab --control 100/5000 --variant 130/5000
 ```
 
 ## License
 
-MIT
+Copyright 2026 ZHU YUMING
+
+Licensed under the Apache License, Version 2.0
