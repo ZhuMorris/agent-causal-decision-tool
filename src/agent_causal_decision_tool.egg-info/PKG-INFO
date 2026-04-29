@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: agent-causal-decision-tool
+Version: 0.1.0
+Summary: Causal decision and audit tool for AI agents
+Author: Morris
+Requires-Python: >=3.9
+Requires-Dist: click>=8.1.0
+Requires-Dist: scipy>=1.11.0
+Requires-Dist: numpy>=1.24.0
+Requires-Dist: pydantic>=2.0.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: pytest-cov; extra == "dev"
