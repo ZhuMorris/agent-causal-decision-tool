@@ -141,12 +141,53 @@ def calculate_ab(input_data: dict) -> ABTestOutput:
         "minimum_detectable_effect_pct": round(mde, 4)
     }
     
+    # Build audit with decision path
+    decision_path = [
+        {
+            "step": "Input validation",
+            "passed": c_total > 0 and v_total > 0,
+            "details": {"control_total": c_total, "variant_total": v_total}
+        },
+        {
+            "step": "Traffic check",
+            "passed": c_total >= min_sample and v_total >= min_sample,
+            "details": {"control_size": c_total, "variant_size": v_total, "min_required": min_sample},
+            "warning": f"Traffic low" if c_total < min_sample or v_total < min_sample else None,
+            "severity": "warning"
+        },
+        {
+            "step": "Conversion rate calculation",
+            "passed": True,
+            "details": {"control_rate": round(p_c, 6), "variant_rate": round(p_v, 6)}
+        },
+        {
+            "step": "Statistical significance test",
+            "passed": p_value < alpha,
+            "details": {"p_value": round(p_value, 6), "alpha": alpha, "z_score": round(z, 4)},
+            "warning": f"p={p_value:.4f} >= {alpha}" if p_value >= alpha else None,
+            "severity": "info"
+        },
+        {
+            "step": "Effect size check",
+            "passed": abs(lift) >= 1,
+            "details": {"lift_pct": round(lift, 4), "threshold": 1},
+            "warning": f"Effect small ({lift:.2f}%)" if abs(lift) < 1 else None,
+            "severity": "info"
+        },
+        {
+            "step": "Decision",
+            "passed": True,
+            "details": {"decision": decision, "confidence": confidence, "reason": summary_map[decision]}
+        }
+    ]
+    
     audit = {
         "experiment_type": "ab_test",
         "period": {"analyzed_at": "now"},
         "traffic_size": c_total + v_total,
         "computed_stats": list(stats_output.keys()),
-        "thresholds_applied": {"alpha": alpha, "power": power},
+        "thresholds_applied": {"alpha": alpha, "power": power, "min_traffic": min_sample},
+        "decision_path": decision_path,
         "assumptions": [
             "Randomized assignment",
             "Independent observations",

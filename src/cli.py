@@ -7,6 +7,7 @@ from pathlib import Path
 
 from ab_test import calculate_ab
 from did import calculate_did
+from audit import format_audit_text
 
 
 @click.group()
@@ -72,23 +73,35 @@ def did_analysis(pre_control, post_control, pre_treated, post_treated, output_fo
 
 @main.command("audit")
 @click.argument("input_file", type=click.Path(exists=True))
-def audit(input_file):
-    """Reconstruct and audit a previous decision"""
+@click.option("--format", "output_format", type=click.Choice(["text", "json"]), default="text")
+def audit(input_file, output_format):
+    """Reconstruct and audit a previous decision with detailed decision path"""
     with open(input_file, "r") as f:
         data = json.load(f)
     
-    # Re-run based on mode
-    if data.get("mode") == "ab_test":
-        result = calculate_ab(data.get("inputs", {}))
-        click.echo("=== A/B Test Audit ===")
-    elif data.get("mode") == "did":
-        result = calculate_did(data.get("inputs", {}))
-        click.echo("=== DiD Audit ===")
-    else:
-        click.echo(f"Unknown mode: {data.get('mode')}", err=True)
-        sys.exit(1)
+    mode = data.get("mode", "ab_test")
     
-    click.echo(result.model_dump_json(indent=2))
+    if output_format == "json":
+        # Show full audit object with decision path
+        audit_obj = data.get("audit", {})
+        audit_obj["mode"] = mode
+        audit_obj["inputs"] = data.get("inputs", {})
+        click.echo(json.dumps(audit_obj, indent=2))
+    else:
+        # Show human-readable decision path
+        click.echo(format_audit_text({
+            "mode": mode,
+            "generated_at": data.get("timestamp", "unknown"),
+            "inputs": data.get("inputs", {}),
+            "decision_path": data.get("audit", {}).get("decision_path", []),
+            "warnings_triggered": data.get("warnings", []),
+            "limitations": data.get("audit", {}).get("limitations", []),
+            "final_decision": {
+                "decision": data.get("recommendation", {}).get("decision", "unknown"),
+                "confidence": data.get("recommendation", {}).get("confidence", "unknown"),
+                "summary": data.get("recommendation", {}).get("summary", "")
+            }
+        }))
 
 
 @main.command("version")
