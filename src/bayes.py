@@ -37,8 +37,6 @@ def calculate_bayes_ab(input_data: dict, n_samples: int = 20000) -> dict:
     beta_v = beta_prior + (v_total - v_conv)
     
     # Monte Carlo simulation: sample from posteriors and compare
-    n_samples: int = 20000
-    
     if n_samples < 1:
         raise ValueError(f"n_samples must be >= 1, got {n_samples}")
     
