@@ -5,7 +5,7 @@ metadata:
   {
     "openclaw": {
       "category": "data-science",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "tools": ["exec"],
       "requires": {
         "bins": ["python3", "git", "pip"],
@@ -193,6 +193,65 @@ PYTHONPATH=. python3 -m src.cli audit /tmp/result.json --format json
 -- FINAL DECISION --
   Decision: SHIP
 ```
+
+### Experiment History & Persistence
+
+All commands support `--save` to persist results to local SQLite history:
+
+```bash
+# Run and save in one step
+PYTHONPATH=. python3 -m src.cli ab --control 100/5000 --variant 130/5000 --save
+PYTHONPATH=. python3 -m src.cli did --pre-control 1000 --post-control 1100 --pre-treated 900 --post-treated 1150 --save
+PYTHONPATH=. python3 -m src.cli plan --baseline 0.02 --mde 5 --traffic 5000 --save
+```
+
+**History commands:**
+
+```bash
+# List recent experiments
+PYTHONPATH=. python3 -m src.cli history
+PYTHONPATH=. python3 -m src.cli history --mode ab_test --limit 10
+
+# Compare multiple experiments by ID
+PYTHONPATH=. python3 -m src.cli compare 1 2 3
+
+# Save a prior JSON result file to history
+PYTHONPATH=. python3 -m src.cli save /tmp/result.json --name "checkout-v3-test"
+```
+
+**History output example:**
+```
+ID    Date       Mode       Decision   Lift     P-value  Summary
+--------------------------------------------------------------------
+3     2026-04-30 did        ship       16.67    -        Treatment effect is 150.00...
+2     2026-04-30 ab_test    escalate   6.25     0.6947   Results not conclusive...
+1     2026-04-30 ab_test    ship       30.00    0.0454   Variant performs 30.00%...
+```
+
+**Compare output example:**
+```
+EXPERIMENT COMPARISON
+==================================================
+Experiments compared: 3
+
+Summary by decision:
+  SHIP: 2 experiment(s)
+  ESCALATE: 1 experiment(s)
+
+Summary by mode:
+  ab_test: 2 experiment(s)
+  did: 1 experiment(s)
+
+Lift summary: max=30.00%, min=6.25%, avg=17.64% (3 experiments)
+
+Attention needed: 2 experiments recommend ship. Review if they test the same metric.
+```
+
+**Persistence:**
+- SQLite DB stored at `~/.agent-causal/history.db`
+- All experiment modes supported: `ab_test`, `did`, `planning`
+- Full raw JSON preserved for audit reconstruction
+- Filter by mode, limit results, name experiments for later reference
 
 ## Decision Reference
 
