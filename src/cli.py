@@ -8,15 +8,54 @@ from pathlib import Path
 from ab_test import calculate_ab
 from did import calculate_did
 from planning import calculate_plan
+from bayes import calculate_bayes_ab
 from audit import format_audit_text
 import store
 
 
 @click.group()
-@click.version_option(version="0.2.0")
+@click.version_option(version="0.4.0")
 def main():
     """Agent Causal Decision Tool - causal decision and audit for AI agents"""
     pass
+
+
+@main.command("bayes")
+@click.option("--control", required=True, help="Control group: conversions/total (e.g., 100/5000)")
+@click.option("--variant", required=True, help="Variant group: conversions/total (e.g., 120/5000)")
+@click.option("--name", default="variant_1", help="Variant name")
+@click.option("--format", "output_format", type=click.Choice(["json", "text"]), default="json")
+@click.option("--save", "auto_save", is_flag=True, help="Save result to experiment history")
+@click.option("--samples", default=20000, type=int, help="Monte Carlo samples (default: 20000)")
+def bayes_ab(control, variant, name, output_format, auto_save, samples):
+    """Run Bayesian A/B test using Beta-Binomial conjugate model"""
+    try:
+        c_parts = control.split("/")
+        v_parts = variant.split("/")
+        
+        input_data = {
+            "control_conversions": int(c_parts[0]),
+            "control_total": int(c_parts[1]),
+            "variant_conversions": int(v_parts[0]),
+            "variant_total": int(v_parts[1]),
+            "variant_name": name
+        }
+    except (ValueError, IndexError) as e:
+        click.echo(f"Error parsing input: {e}", err=True)
+        click.echo("Use format: --control 100/5000 --variant 120/5000")
+        sys.exit(1)
+    
+    result = calculate_bayes_ab(input_data, n_samples=samples)
+    result_json = json.dumps(result, indent=2)
+    
+    if auto_save:
+        row_id = store.save_experiment(result_json, "bayesian_ab", json.dumps(input_data))
+        click.echo(f"[Saved to history as experiment #{row_id}]", err=True)
+    
+    if output_format == "json":
+        click.echo(result_json)
+    else:
+        _print_bayes_text(result)
 
 
 @main.command("ab")
@@ -334,6 +373,56 @@ def _print_did_text(result):
     click.echo("Assumptions:")
     for a in result.assumptions:
         click.echo(f"  - {a}")
+
+
+def _print_bayes_text(result):
+    """Print Bayesian A/B test in human-readable format"""
+    rec = result["recommendation"]
+    stats = result["statistics"]
+    traffic = result["traffic_stats"]
+    
+    click.echo("=" * 50)
+    click.echo("BAYESIAN A/B TEST RESULTS")
+    click.echo("=" * 50)
+    click.echo(f"Decision: {rec['decision'].upper()} ({rec['confidence']} confidence)")
+    click.echo(f"Summary: {rec['summary']}")
+    click.echo()
+    click.echo("Traffic:")
+    click.echo(f"  Control:  {traffic['control_size']:,}")
+    click.echo(f"  Variant:  {traffic['variant_size']:,}")
+    click.echo(f"  Total:    {traffic['total_size']:,}")
+    click.echo()
+    click.echo("Posterior (after data):")
+    pc = stats["posterior_control"]
+    pv = stats["posterior_variant"]
+    click.echo(f"  Control:  Beta(α={pc['alpha']}, β={pc['beta']}) mean={pc['mean']:.4f}")
+    click.echo(f"  Variant:  Beta(α={pv['alpha']}, β={pv['beta']}) mean={pv['mean']:.4f}")
+    click.echo()
+    click.echo("Monte Carlo Results (20k samples):")
+    click.echo(f"  P(Variant wins):  {stats['p_variant_wins']:.4f}")
+    click.echo(f"  P(Control wins):  {stats['p_control_wins']:.4f}")
+    click.echo(f"  P(Tie):           {stats['p_tie']:.4f}")
+    click.echo()
+    click.echo("Lift Distribution:")
+    click.echo(f"  Median lift:  {stats['lift_median_pct']:.2f}%")
+    click.echo(f"  95% CI:       [{stats['lift_95ci_pct'][0]:.2f}%, {stats['lift_95ci_pct'][1]:.2f}%]")
+    click.echo()
+    click.echo("Observed Rates:")
+    click.echo(f"  Control rate:  {stats['control_rate_observed']:.4f}")
+    click.echo(f"  Variant rate:  {stats['variant_rate_observed']:.4f}")
+    click.echo(f"  Relative lift: {stats['relative_lift_pct']:.2f}%")
+    
+    warnings = result.get("warnings", [])
+    if warnings:
+        click.echo()
+        click.echo("Warnings:")
+        for w in warnings:
+            click.echo(f"  [{w['severity'].upper()}] {w['code']}: {w['message']}")
+    
+    click.echo()
+    click.echo("Next steps:")
+    for step in result.get("next_steps", []):
+        click.echo(f"  -> {step}")
 
 
 def _print_compare_text(comparison):

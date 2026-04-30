@@ -5,7 +5,7 @@ metadata:
   {
     "openclaw": {
       "category": "data-science",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "tools": ["exec"],
       "requires": {
         "bins": ["python3", "git", "pip"],
@@ -88,7 +88,7 @@ PYTHONPATH=. python3 -m src.cli plan --baseline 0.02 --mde 5 --traffic 5000
 - `slow`: 15–60 days
 - `not_recommended`: >60 days
 
-### A/B Test Analysis
+### A/B Test Analysis (Frequentist)
 
 ```bash
 cd ~/clawd/agent-causal-decision-tool
@@ -145,6 +145,61 @@ PYTHONPATH=. python3 -m src.cli ab --control 100/5000 --variant 130/5000
   }
 }
 ```
+
+### A/B Test Analysis (Frequentist)
+
+```bash
+cd ~/clawd/agent-causal-decision-tool
+PYTHONPATH=. python3 -m src.cli ab --control 100/5000 --variant 130/5000
+```
+
+**Parameters:**
+- `--control`: Control group conversions/total (e.g., `100/5000`)
+- `--variant`: Variant group conversions/total (e.g., `130/5000`)
+- `--name`: Variant name (optional, default: `variant_1`)
+- `--format`: Output format `json` (default) or `text`
+
+### Bayesian A/B Test
+
+```bash
+cd ~/clawd/agent-causal-decision-tool
+PYTHONPATH=. python3 -m src.cli bayes --control 100/5000 --variant 130/5000
+```
+
+**Uses Beta-Binomial conjugate model with Jeffreys prior.**
+- Prior: Beta(0.5, 0.5) — uninformative
+- Posterior: Beta(α + successes, β + failures)
+- Decision via Monte Carlo simulation (20k samples)
+- Thresholds: P(variant wins) ≥ 0.95 → ship, ≤ 0.05 → reject
+
+**Parameters:**
+- `--control`, `--variant`: Conversions/total (same as `ab`)
+- `--name`: Variant name
+- `--format`: `json` (default) or `text`
+- `--samples`: Monte Carlo samples (default: 20000)
+
+**Example output:**
+```json
+{
+  "mode": "bayesian_ab",
+  "recommendation": {
+    "decision": "ship",
+    "confidence": "medium",
+    "summary": "Variant wins with P(better)=0.976. Median lift=30.10%. Ship."
+  },
+  "statistics": {
+    "p_variant_wins": 0.9758,
+    "lift_median_pct": 30.10,
+    "lift_95ci_pct": [0.20, 69.15],
+    "posterior_control": {"alpha": 100.5, "beta": 4900.5, "mean": 0.0201},
+    "posterior_variant": {"alpha": 130.5, "beta": 4870.5, "mean": 0.0261}
+  }
+}
+```
+
+**When to use Bayesian vs Frequentist:**
+- Bayesian: small data, need probability distributions, want to stop early
+- Frequentist: large data, traditional significance testing, need p-values
 
 ### DiD Analysis
 
