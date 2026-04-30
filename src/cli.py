@@ -7,6 +7,7 @@ from pathlib import Path
 
 from ab_test import calculate_ab
 from did import calculate_did
+from planning import calculate_plan
 from audit import format_audit_text
 
 
@@ -69,6 +70,39 @@ def did_analysis(pre_control, post_control, pre_treated, post_treated, output_fo
         click.echo(result.model_dump_json(indent=2))
     else:
         _print_did_text(result)
+
+
+@main.command("plan")
+@click.option("--baseline", required=True, type=float, help="Baseline conversion rate (e.g., 0.02 for 2%)")
+@click.option("--mde", "mde_pct", required=True, type=float, help="Minimum detectable effect as relative %% lift (e.g., 5 for 5% lift)")
+@click.option("--traffic", "daily_traffic", required=True, type=int, help="Daily traffic per arm")
+@click.option("--confidence", default=0.95, type=float, help="Confidence level (default: 0.95)")
+@click.option("--power", default=0.8, type=float, help="Statistical power (default: 0.8)")
+@click.option("--allocation", default="equal", type=click.Choice(["equal", "custom"]), help="Traffic allocation")
+@click.option("--allocation-ratio", default=None, help="Custom allocation ratio (e.g., 0.3/0.7)")
+@click.option("--format", "output_format", type=click.Choice(["json", "text"]), default="json")
+def plan(baseline, mde_pct, daily_traffic, confidence, power, allocation, allocation_ratio, output_format):
+    """Plan an A/B test: compute sample size, duration, and feasibility"""
+    try:
+        input_data = {
+            "baseline_conversion_rate": baseline,
+            "mde_pct": mde_pct,
+            "daily_traffic": daily_traffic,
+            "confidence_level": confidence,
+            "power": power,
+            "allocation": allocation,
+            "allocation_ratio": allocation_ratio
+        }
+    except Exception as e:
+        click.echo(f"Error parsing input: {e}", err=True)
+        sys.exit(1)
+    
+    result = calculate_plan(input_data)
+    
+    if output_format == "json":
+        click.echo(result.model_dump_json(indent=2))
+    else:
+        _print_plan_text(result)
 
 
 @main.command("audit")
@@ -144,6 +178,34 @@ def _print_ab_text(result):
     click.echo("Next steps:")
     for step in result.next_steps:
         click.echo(f"  -> {step}")
+
+
+def _print_plan_text(result):
+    """Print planning output in human-readable format"""
+    rec = result.recommendation
+    plan = result.planning
+    
+    click.echo("=" * 50)
+    click.echo("EXPERIMENT PLANNING RESULTS")
+    click.echo("=" * 50)
+    click.echo(f"Feasibility: {plan['feasibility'].upper()}")
+    click.echo(f"Decision: {rec.decision.upper()} ({rec.confidence} confidence)")
+    click.echo(f"Summary: {rec.summary}")
+    click.echo()
+    click.echo("Planning:")
+    click.echo(f"  Required per arm:  {plan['required_sample_per_arm']:,}")
+    click.echo(f"  Total required:     {plan['total_required']:,}")
+    click.echo(f"  Daily per arm:      {plan['daily_per_arm']:,}")
+    click.echo(f"  Estimated days:     {plan['estimated_days']:.1f}")
+    click.echo(f"  MDE (absolute):     {plan['mde_absolute']:.4f}")
+    alloc = plan['allocation_used']
+    click.echo(f"  Allocation:          control={alloc['control']}, variant={alloc['variant']}")
+    
+    if result.warnings:
+        click.echo()
+        click.echo("Warnings:")
+        for w in result.warnings:
+            click.echo(f"  [{w.severity.upper()}] {w.code}: {w.message}")
 
 
 def _print_did_text(result):

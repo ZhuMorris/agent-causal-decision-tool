@@ -63,6 +63,28 @@ class ABTestOutput(BaseModel):
     inputs: dict = Field(..., description="Original inputs for audit")
 
 
+class PlanningInput(BaseModel):
+    """Experiment planning input schema"""
+    baseline_conversion_rate: float = Field(..., description="Baseline conversion rate (0-1)")
+    mde_pct: float = Field(..., description="Minimum detectable effect as percentage (e.g., 5 for 5% lift)")
+    daily_traffic: int = Field(..., description="Daily traffic per arm")
+    confidence_level: float = Field(default=0.95, description="Confidence level")
+    power: float = Field(default=0.8, description="Statistical power")
+    allocation: Literal["equal", "custom"] = Field(default="equal")
+    allocation_ratio: Optional[str] = Field(default=None, description="e.g. 0.5/0.5")
+
+
+class PlanningOutput(BaseModel):
+    """Experiment planning output schema"""
+    version: str = "1.0"
+    timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
+    mode: Literal["planning"] = "planning"
+    recommendation: Recommendation
+    planning: dict = Field(..., description="Planning computed values")
+    warnings: list[WarningDetail] = Field(default_factory=list)
+    inputs: dict
+
+
 class DIDOutput(BaseModel):
     """DiD output schema"""
     version: str = "1.0"
