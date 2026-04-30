@@ -1,11 +1,11 @@
 ---
 name: agent-causal
-description: Causal decision and audit tool for AI agents. Run A/B tests and Difference-in-Differences analysis with structured JSON output, decision paths, and audit trails.
+description: Agent Causal Decision Tool helps you and your AI agents answer one question from experiment data: should we ship this change, keep running the test, or roll it back? Returns structured JSON decisions, key statistics, and audit trails from A/B tests and Difference-in-Differences analysis.
 metadata:
   {
     "openclaw": {
       "category": "data-science",
-      "version": "0.5.2",
+      "version": "0.5.3",
       "license": "Apache-2.0",
       "tools": ["exec"],
       "requires": {
