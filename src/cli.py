@@ -9,10 +9,11 @@ from ab_test import calculate_ab
 from did import calculate_did
 from planning import calculate_plan
 from audit import format_audit_text
+import store
 
 
 @click.group()
-@click.version_option(version="0.1.0")
+@click.version_option(version="0.2.0")
 def main():
     """Agent Causal Decision Tool - causal decision and audit for AI agents"""
     pass
@@ -23,7 +24,8 @@ def main():
 @click.option("--variant", required=True, help="Variant group: conversions/total (e.g., 120/5000)")
 @click.option("--name", default="variant_1", help="Variant name")
 @click.option("--format", "output_format", type=click.Choice(["json", "text"]), default="json")
-def ab_test(control, variant, name, output_format):
+@click.option("--save", "auto_save", is_flag=True, help="Save result to experiment history")
+def ab_test(control, variant, name, output_format, auto_save):
     """Run A/B test analysis"""
     try:
         c_parts = control.split("/")
@@ -42,9 +44,14 @@ def ab_test(control, variant, name, output_format):
         sys.exit(1)
     
     result = calculate_ab(input_data)
+    result_json = result.model_dump_json(indent=2)
+    
+    if auto_save:
+        row_id = store.save_experiment(result_json, "ab_test", json.dumps(input_data))
+        click.echo(f"[Saved to history as experiment #{row_id}]", err=True)
     
     if output_format == "json":
-        click.echo(result.model_dump_json(indent=2))
+        click.echo(result_json)
     else:
         _print_ab_text(result)
 
@@ -55,7 +62,8 @@ def ab_test(control, variant, name, output_format):
 @click.option("--pre-treated", required=True, type=float, help="Treated group metric before treatment")
 @click.option("--post-treated", required=True, type=float, help="Treated group metric after treatment")
 @click.option("--format", "output_format", type=click.Choice(["json", "text"]), default="json")
-def did_analysis(pre_control, post_control, pre_treated, post_treated, output_format):
+@click.option("--save", "auto_save", is_flag=True, help="Save result to experiment history")
+def did_analysis(pre_control, post_control, pre_treated, post_treated, output_format, auto_save):
     """Run Difference-in-Differences analysis"""
     input_data = {
         "pre_control": pre_control,
@@ -65,9 +73,14 @@ def did_analysis(pre_control, post_control, pre_treated, post_treated, output_fo
     }
     
     result = calculate_did(input_data)
+    result_json = result.model_dump_json(indent=2)
+    
+    if auto_save:
+        row_id = store.save_experiment(result_json, "did", json.dumps(input_data))
+        click.echo(f"[Saved to history as experiment #{row_id}]", err=True)
     
     if output_format == "json":
-        click.echo(result.model_dump_json(indent=2))
+        click.echo(result_json)
     else:
         _print_did_text(result)
 
@@ -81,7 +94,8 @@ def did_analysis(pre_control, post_control, pre_treated, post_treated, output_fo
 @click.option("--allocation", default="equal", type=click.Choice(["equal", "custom"]), help="Traffic allocation")
 @click.option("--allocation-ratio", default=None, help="Custom allocation ratio (e.g., 0.3/0.7)")
 @click.option("--format", "output_format", type=click.Choice(["json", "text"]), default="json")
-def plan(baseline, mde_pct, daily_traffic, confidence, power, allocation, allocation_ratio, output_format):
+@click.option("--save", "auto_save", is_flag=True, help="Save result to experiment history")
+def plan(baseline, mde_pct, daily_traffic, confidence, power, allocation, allocation_ratio, output_format, auto_save):
     """Plan an A/B test: compute sample size, duration, and feasibility"""
     try:
         input_data = {
@@ -98,11 +112,94 @@ def plan(baseline, mde_pct, daily_traffic, confidence, power, allocation, alloca
         sys.exit(1)
     
     result = calculate_plan(input_data)
+    result_json = result.model_dump_json(indent=2)
+    
+    if auto_save:
+        row_id = store.save_experiment(result_json, "planning", json.dumps(input_data))
+        click.echo(f"[Saved to history as experiment #{row_id}]", err=True)
     
     if output_format == "json":
-        click.echo(result.model_dump_json(indent=2))
+        click.echo(result_json)
     else:
         _print_plan_text(result)
+
+
+@main.command("save")
+@click.argument("result_file", type=click.Path(exists=True))
+@click.option("--name", default=None, help="Optional experiment name for labeling")
+@click.option("--mode", default=None, help="Override mode (auto-detected from JSON if omitted)")
+def save_experiment(result_file, name, mode):
+    """Save a prior experiment result JSON to the persistent history"""
+    with open(result_file, "r") as f:
+        data = json.load(f)
+    
+    detected_mode = mode or data.get("mode", "unknown")
+    inputs_json = json.dumps(data.get("inputs", {}))
+    if name:
+        data["inputs"]["experiment_name"] = name
+    
+    row_id = store.save_experiment(json.dumps(data), detected_mode, inputs_json)
+    click.echo(f"Saved as experiment #{row_id}")
+
+
+@main.command("history")
+@click.option("--mode", default=None, type=click.Choice(["ab_test", "did", "planning"]), help="Filter by experiment mode")
+@click.option("--limit", default=20, type=int, help="Number of results to show (default: 20)")
+@click.option("--format", "output_format", type=click.Choice(["text", "json"]), default="text")
+def history(mode, limit, output_format):
+    """List past experiments from history"""
+    experiments = store.list_experiments(mode=mode, limit=limit)
+    
+    if not experiments:
+        click.echo("No experiments in history.")
+        return
+    
+    if output_format == "json":
+        # Return lightweight records (not full raw JSON blobs)
+        lightweight = []
+        for e in experiments:
+            lightweight.append({
+                "id": e["id"],
+                "mode": e["mode"],
+                "decision": e["decision"],
+                "confidence": e["confidence"],
+                "summary": e["summary"],
+                "primary_lift": e["primary_lift"],
+                "p_value": e["p_value"],
+                "created_at": e["created_at"],
+                "experiment_name": e["experiment_name"]
+            })
+        click.echo(json.dumps(lightweight, indent=2))
+    else:
+        click.echo(f"{'ID':<5} {'Date':<10} {'Mode':<10} {'Decision':<12} {'Lift':<8} {'P-value':<8} {'Summary'}")
+        click.echo("-" * 90)
+        for e in experiments:
+            lift_str = f"{e['primary_lift']:.2f}" if e['primary_lift'] is not None else "-"
+            p_str = f"{e['p_value']:.4f}" if e['p_value'] is not None else "-"
+            date = e['created_at'][:10]
+            mode_str = e['mode'][:10]
+            decision_str = e['decision'][:12]
+            name_str = e['experiment_name'] or ""
+            summary = e['summary'][:40] if e['summary'] else ""
+            click.echo(f"{e['id']:<5} {date:<10} {mode_str:<10} {decision_str:<12} {lift_str:<8} {p_str:<8} {summary} {name_str}")
+
+
+@main.command("compare")
+@click.argument("experiment_ids", nargs=-1, type=int, required=True)
+@click.option("--format", "output_format", type=click.Choice(["text", "json"]), default="text")
+def compare(experiment_ids, output_format):
+    """Compare multiple experiments by their IDs. Usage: compare 1 3 5"""
+    ids = list(experiment_ids)
+    comparison = store.compare_experiments(ids)
+    
+    if "error" in comparison:
+        click.echo(f"Error: {comparison['error']}", err=True)
+        sys.exit(1)
+    
+    if output_format == "json":
+        click.echo(json.dumps(comparison, indent=2))
+    else:
+        _print_compare_text(comparison)
 
 
 @main.command("audit")
@@ -141,7 +238,7 @@ def audit(input_file, output_format):
 @main.command("version")
 def version():
     """Show version info"""
-    click.echo("agent-causal-decision-tool v0.1.0")
+    click.echo("agent-causal-decision-tool v0.2.0")
 
 
 def _print_ab_text(result):
@@ -237,6 +334,44 @@ def _print_did_text(result):
     click.echo("Assumptions:")
     for a in result.assumptions:
         click.echo(f"  - {a}")
+
+
+def _print_compare_text(comparison):
+    """Print experiment comparison in human-readable format"""
+    click.echo("=" * 50)
+    click.echo("EXPERIMENT COMPARISON")
+    click.echo("=" * 50)
+    click.echo(f"Experiments compared: {comparison['count']}")
+    click.echo()
+    
+    click.echo("Summary by decision:")
+    for decision, exps in comparison['by_decision'].items():
+        click.echo(f"  {decision.upper()}: {len(exps)} experiment(s)")
+    click.echo()
+    
+    click.echo("Summary by mode:")
+    for mode, ids in comparison['by_mode'].items():
+        click.echo(f"  {mode}: {len(ids)} experiment(s)")
+    click.echo()
+    
+    if comparison.get('lift_summary'):
+        ls = comparison['lift_summary']
+        click.echo(f"Lift summary: max={ls['max']:.2f}%, min={ls['min']:.2f}%, avg={ls['avg']:.2f}% ({ls['count']} experiments)")
+        click.echo()
+    
+    click.echo("Individual experiments:")
+    click.echo(f"  {'ID':<5} {'Mode':<10} {'Decision':<12} {'Lift':<8} {'P-value':<8} {'Created'}")
+    click.echo("  " + "-" * 55)
+    for exp in comparison['experiments']:
+        lift_str = f"{exp['primary_lift']:.2f}" if exp['primary_lift'] is not None else "-"
+        p_str = f"{exp['p_value']:.4f}" if exp['p_value'] is not None else "-"
+        date = exp['created_at'][:10]
+        click.echo(f"  {exp['id']:<5} {exp['mode']:<10} {exp['decision']:<12} {lift_str:<8} {p_str:<8} {date}")
+    
+    attention = comparison.get("attention", {})
+    if attention.get("suggestion"):
+        click.echo()
+        click.echo(f"Attention needed: {attention['suggestion']}")
 
 
 if __name__ == "__main__":
