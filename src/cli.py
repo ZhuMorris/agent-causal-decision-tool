@@ -364,8 +364,8 @@ def _format_maturity_text(maturity: dict) -> str:
 
 @main.command("version")
 def version():
-    """Show version info"""
-    click.echo("agent-causal-decision-tool v0.4.0")
+    """"Show version info"""
+    click.echo(f"agent-causal-decision-tool {_VERSION}")
 
 
 def _print_ab_text(result):
