@@ -1,8 +1,40 @@
 # Agent Causal Decision Tool
 
-A causal decision and audit tool for AI agents. Plan, evaluate, and audit product experiments using A/B testing, Difference-in-Differences, and Bayesian methods.
-
 **Source:** https://github.com/ZhuMorris/agent-causal-decision-tool
+
+---
+
+## What is this?
+
+Agent Causal Decision Tool helps you and your AI agents answer one question from experiment data: "should we ship this change, keep running the test, or roll it back?" It takes in simple A/B or rollout summaries and returns a structured JSON decision, key statistics, and an audit record you can store or review later.
+
+Rather than being a full experimentation platform, it is a **decision engine**. You bring the data (from your logs, BI tool, or CSV); it handles the stats, decision logic, and audit trail.
+
+### Why it exists
+
+In many teams, experiment decisions happen in ad hoc spreadsheets or dashboards. People glance at lift, argue about whether the sample size is enough, and sometimes ship features based on noisy or biased results. Agents make this worse if they are wired to react to any small uplift they see.
+
+This tool wraps a few standard methods into one consistent, agent‑friendly interface:
+
+- **Frequentist A/B testing** for classic "control vs variant" questions.
+- **Bayesian A/B testing** when you want answers like "there is a 93% chance B is better than A" instead of only p‑values.
+- **Difference‑in‑differences (DiD)** for quasi‑experiments like staged rollouts or region‑based launches where you cannot randomize perfectly.
+- **Planning and power checks** so you can see if a test is realistic before you start it.
+- **Decision audit** so humans can see what the agent did, why it did it, and how strong the evidence really was.
+
+The goal is not to replace your analytics stack, but to give agents a small, reliable decision block they can call inside workflows.
+
+### When to use it
+
+Use this tool whenever you or your agents have experiment or rollout results and need a decision you can defend:
+
+- You ran an A/B test and want to know whether to ship, keep running, or reject the variant.
+- You rolled out a feature to one region or cohort first and want a DiD estimate of impact compared to a similar control group.
+- You prefer a Bayesian summary ("95% chance B is better; expected lift 3–5%") to drive thresholds in automated workflows.
+- You need an audit trail with experiment period, traffic size, assumptions, thresholds, and warnings so product, data, or risk teams can review agent decisions later.
+- You want to plan an experiment (sample size, minimum detectable effect, expected duration) or compare current results to previous experiments to see which wins are robust.
+
+---
 
 ## Features
 
