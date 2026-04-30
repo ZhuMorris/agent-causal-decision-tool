@@ -9,7 +9,7 @@ from ab_test import calculate_ab
 from did import calculate_did
 from planning import calculate_plan
 from bayes import calculate_bayes_ab
-from audit import format_audit_text
+from audit import format_audit_text, check_experiment_maturity
 import store
 
 
@@ -244,7 +244,8 @@ def compare(experiment_ids, output_format):
 @main.command("audit")
 @click.argument("input_file", type=click.Path(exists=True))
 @click.option("--format", "output_format", type=click.Choice(["text", "json"]), default="text")
-def audit(input_file, output_format):
+@click.option("--maturity", is_flag=True, help="Include experiment maturity assessment")
+def audit(input_file, output_format, maturity):
     """Reconstruct and audit a previous decision with detailed decision path"""
     with open(input_file, "r") as f:
         data = json.load(f)
@@ -256,10 +257,19 @@ def audit(input_file, output_format):
         audit_obj = data.get("audit", {})
         audit_obj["mode"] = mode
         audit_obj["inputs"] = data.get("inputs", {})
+        
+        if maturity:
+            maturity_result = check_experiment_maturity(audit_obj, data)
+            audit_obj["maturity_assessment"] = maturity_result
+        
         click.echo(json.dumps(audit_obj, indent=2))
     else:
         # Show human-readable decision path
-        click.echo(format_audit_text({
+        audit_obj = data.get("audit", {})
+        audit_obj["mode"] = mode
+        audit_obj["inputs"] = data.get("inputs", {})
+        
+        text = format_audit_text({
             "mode": mode,
             "generated_at": data.get("timestamp", "unknown"),
             "inputs": data.get("inputs", {}),
@@ -271,13 +281,55 @@ def audit(input_file, output_format):
                 "confidence": data.get("recommendation", {}).get("confidence", "unknown"),
                 "summary": data.get("recommendation", {}).get("summary", "")
             }
-        }))
+        })
+        
+        if maturity:
+            maturity_result = check_experiment_maturity(audit_obj, data)
+            text += "\n\n" + _format_maturity_text(maturity_result)
+        
+        click.echo(text)
+
+
+def _format_maturity_text(maturity: dict) -> str:
+    """Format maturity assessment as human-readable text."""
+    label = maturity["maturity_label"].upper()
+    score = maturity["maturity_score"]
+    desc = maturity["description"]
+    
+    lines = [
+        "=" * 50,
+        "EXPERIMENT MATURITY ASSESSMENT",
+        "=" * 50,
+        f"Score: {score}/100  [{label}]",
+        f"{desc}",
+        ""
+    ]
+    
+    if maturity.get("issues"):
+        lines.append("ISSUES:")
+        for issue in maturity["issues"]:
+            lines.append(f"  ✗ {issue}")
+        lines.append("")
+    
+    if maturity.get("warnings"):
+        lines.append("WARNINGS:")
+        for w in maturity["warnings"]:
+            lines.append(f"  ⚠ {w}")
+        lines.append("")
+    
+    lines.append("CHECKS:")
+    checks = maturity.get("checks", {})
+    for check, passed in checks.items():
+        status = "✓" if passed else "✗"
+        lines.append(f"  [{status}] {check}")
+    
+    return "\n".join(lines)
 
 
 @main.command("version")
 def version():
     """Show version info"""
-    click.echo("agent-causal-decision-tool v0.2.0")
+    click.echo("agent-causal-decision-tool v0.4.0")
 
 
 def _print_ab_text(result):

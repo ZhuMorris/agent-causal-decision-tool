@@ -345,6 +345,111 @@ def _norm_cdf(z: float) -> float:
     return 0.5 * (1 + math.erf(z / (2 ** 0.5)))
 
 
+def check_experiment_maturity(audit: dict, result: dict) -> dict:
+    """
+    Evaluate experiment maturity and audit readiness.
+    
+    Checks:
+    - All decision path steps passed
+    - No critical warnings
+    - Limitations documented
+    - Sufficient traffic
+    - Decision is not speculative
+    - Evidence quality score
+    """
+    mode = audit["mode"]
+    traffic_size = audit.get("traffic_size", 0)
+    decision_path = audit.get("decision_path", [])
+    warnings_triggered = audit.get("warnings_triggered", [])
+    limitations = audit.get("limitations", [])
+    final_decision = audit.get("final_decision", {})
+    
+    maturity_score = 100
+    maturity_issues = []
+    maturity_warnings = []
+    
+    # 1. Check all decision steps passed
+    failed_steps = [s for s in decision_path if not s["passed"]]
+    if failed_steps:
+        maturity_score -= 20 * len(failed_steps)
+        maturity_warnings.append(f"{len(failed_steps)} decision step(s) did not pass")
+    
+    # 2. Check critical warnings
+    critical_warnings = [w for w in warnings_triggered if w.get("severity") == "critical"]
+    if critical_warnings:
+        maturity_score -= 30 * len(critical_warnings)
+        maturity_issues.append(f"{len(critical_warnings)} critical warning(s): " + ", ".join([w["code"] for w in critical_warnings]))
+    
+    # 3. Check traffic sufficiency
+    min_traffic_map = {"ab_test": 1000, "bayesian_ab": 500, "did": 0, "planning": 0}
+    min_traffic = min_traffic_map.get(mode, 500)
+    if traffic_size < min_traffic and min_traffic > 0:
+        maturity_score -= 15
+        maturity_warnings.append(f"Traffic ({traffic_size}) below recommended minimum ({min_traffic}) for {mode}")
+    
+    # 4. Check limitations documented
+    if len(limitations) < 2:
+        maturity_score -= 10
+        maturity_warnings.append("Limited documentation of experiment assumptions and limitations")
+    
+    # 5. Decision confidence check
+    confidence = final_decision.get("confidence", "unknown")
+    if confidence == "low":
+        maturity_score -= 10
+        maturity_warnings.append("Decision made with low confidence — may need human review")
+    
+    # 6. Information content in decision path
+    if len(decision_path) < 4:
+        maturity_score -= 10
+        maturity_issues.append(f"Decision path has only {len(decision_path)} steps — may be under-documented")
+    
+    # 7. Check for unacknowledged limitations
+    has_critical_assumption = any("parallel trends" in l.lower() or "randomized" in l.lower() for l in limitations)
+    if not has_critical_assumption and mode in ("did",):
+        maturity_score -= 10
+        maturity_warnings.append(f"{mode} mode but key assumptions not documented")
+    
+    # 8. Warning severity balance
+    warning_count = len(warnings_triggered)
+    critical_count = len(critical_warnings)
+    if warning_count > 3 and critical_count == 0:
+        maturity_score -= 5
+        maturity_warnings.append(f"Multiple ({warning_count}) non-critical warnings — verify experiment health")
+    
+    # Clamp score
+    maturity_score = max(0, maturity_score)
+    
+    # Maturity label
+    if maturity_score >= 90:
+        label = "mature"
+        description = "Experiment is well-documented with full audit trail. Decision is reliable."
+    elif maturity_score >= 70:
+        label = "adequate"
+        description = "Experiment has sufficient documentation. Review warnings before making final decision."
+    elif maturity_score >= 50:
+        label = "immature"
+        description = "Experiment has gaps in documentation or warnings. Human review recommended."
+    else:
+        label = "inadequate"
+        description = "Experiment has critical issues or insufficient documentation. Do not rely on decision without review."
+    
+    return {
+        "maturity_score": maturity_score,
+        "maturity_label": label,
+        "description": description,
+        "issues": maturity_issues,
+        "warnings": maturity_warnings,
+        "checks": {
+            "decision_path_complete": len(failed_steps) == 0,
+            "no_critical_warnings": len(critical_warnings) == 0,
+            "limitations_documented": len(limitations) >= 2,
+            "traffic_sufficient": traffic_size >= min_traffic if min_traffic > 0 else True,
+            "high_confidence": confidence in ("high", "medium"),
+            "steps_documented": len(decision_path) >= 4
+        }
+    }
+
+
 def format_audit_text(audit: dict) -> str:
     """Format audit as human-readable text"""
     lines = [
