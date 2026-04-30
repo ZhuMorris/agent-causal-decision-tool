@@ -5,7 +5,7 @@ metadata:
   {
     "openclaw": {
       "category": "data-science",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "tools": ["exec"],
       "requires": {
         "bins": ["python3", "git", "pip"],
@@ -43,6 +43,50 @@ pip install git+https://github.com/ZhuMorris/agent-causal-decision-tool.git -q
 ```
 
 ## Commands
+
+### Experiment Planning (ab_plan)
+
+Estimate required sample size, duration, and feasibility before running an experiment:
+
+```bash
+cd ~/clawd/agent-causal-decision-tool
+PYTHONPATH=. python3 -m src.cli plan --baseline 0.02 --mde 5 --traffic 5000
+```
+
+**Parameters:**
+- `--baseline` (required): Baseline conversion rate (e.g., `0.02` for 2%)
+- `--mde` (required): Minimum detectable effect as % lift (e.g., `5` for 5% lift)
+- `--traffic` (required): Daily traffic per arm
+- `--confidence` (default `0.95`): Confidence level
+- `--power` (default `0.8`): Statistical power
+- `--allocation`: `equal` (default) or `custom`
+- `--allocation-ratio`: Custom ratio when allocation=custom (e.g., `0.3/0.7`)
+- `--format`: `json` (default) or `text`
+
+**Planning output:**
+```json
+{
+  "mode": "planning",
+  "recommendation": {
+    "decision": "feasible|slow|not_recommended",
+    "confidence": "high|medium|low",
+    "summary": "..."
+  },
+  "planning": {
+    "required_sample_per_arm": 182934,
+    "total_required": 365868,
+    "estimated_days": 36.6,
+    "feasibility": "slow",
+    "allocation_used": {"control": 0.5, "variant": 0.5}
+  },
+  "warnings": [...]
+}
+```
+
+**Feasibility thresholds:**
+- `feasible`: ≤14 days
+- `slow`: 15–60 days
+- `not_recommended`: >60 days
 
 ### A/B Test Analysis
 
