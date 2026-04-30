@@ -256,3 +256,33 @@ class TestBayesABEdgeCases:
         })
         limitations = result["audit"]["limitations"]
         assert len(limitations) >= 2
+
+class TestBayesNSamplesRegression:
+    """Regression tests for n_samples parameter handling"""
+
+    def test_n_samples_parameter_respected(self):
+        """"n_samples from caller must be used, not hardcoded"""
+        result = calculate_bayes_ab({
+            "control_conversions": 100,
+            "control_total": 5000,
+            "variant_conversions": 130,
+            "variant_total": 5000
+        }, n_samples=1000)
+        assert result["statistics"]["monte_carlo_samples"] == 1000
+
+    def test_n_samples_validation(self):
+        """"n_samples < 1 must raise ValueError"""
+        with pytest.raises(ValueError, match="n_samples must be >= 1"):
+            calculate_bayes_ab({
+                "control_conversions": 100,
+                "control_total": 5000,
+                "variant_conversions": 130,
+                "variant_total": 5000
+            }, n_samples=0)
+        with pytest.raises(ValueError, match="n_samples must be >= 1"):
+            calculate_bayes_ab({
+                "control_conversions": 100,
+                "control_total": 5000,
+                "variant_conversions": 130,
+                "variant_total": 5000
+            }, n_samples=-5)
