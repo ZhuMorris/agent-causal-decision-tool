@@ -225,9 +225,14 @@ PYTHONPATH=. python3 -m src.cli ab --control 100/5000 --variant 130/5000 > /tmp/
 # Audit it (human-readable)
 PYTHONPATH=. python3 -m src.cli audit /tmp/result.json --format text
 
-# Audit it (JSON)
-PYTHONPATH=. python3 -m src.cli audit /tmp/result.json --format json
+# Audit with experiment maturity assessment
+PYTHONPATH=. python3 -m src.cli audit /tmp/result.json --maturity
 ```
+
+**Maturity assessment** (with `--maturity` flag):
+- Scores experiments 0–100 across 8 checks
+- Labels: `mature` (≥90), `adequate` (≥70), `immature` (≥50), `inadequate` (<50)
+- Checks: decision path completeness, critical warnings, limitations documented, traffic sufficiency, confidence level, step documentation
 
 **Example audit output:**
 ```
