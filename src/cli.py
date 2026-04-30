@@ -4,6 +4,7 @@ import click
 import json
 import sys
 from pathlib import Path
+from importlib.metadata import version, PackageNotFoundError
 
 from ab_test import calculate_ab
 from did import calculate_did
@@ -13,10 +14,18 @@ from audit import format_audit_text, check_experiment_maturity
 import store
 
 
+def _get_version():
+    try:
+        return version("agent_causal_decision_tool")
+    except PackageNotFoundError:
+        return "unknown"
+
+_VERSION = _get_version()
+
 @click.group()
-@click.version_option(version="0.4.0")
+@click.version_option(version=_VERSION)
 def main():
-    """Agent Causal Decision Tool - causal decision and audit for AI agents"""
+    """"Agent Causal Decision Tool - causal decision and audit for AI agents"""
     pass
 
 
@@ -199,16 +208,17 @@ def save_experiment(result_file, name, mode):
         data = json.load(f)
     
     detected_mode = mode or data.get("mode", "unknown")
-    inputs_json = json.dumps(data.get("inputs", {}))
+    inputs_dict = data.get("inputs", {})
     if name:
-        data["inputs"]["experiment_name"] = name
+        inputs_dict["experiment_name"] = name
+    inputs_json = json.dumps(inputs_dict)
     
     row_id = store.save_experiment(json.dumps(data), detected_mode, inputs_json)
     click.echo(f"Saved as experiment #{row_id}")
 
 
 @main.command("history")
-@click.option("--mode", default=None, type=click.Choice(["ab_test", "did", "planning"]), help="Filter by experiment mode")
+@click.option("--mode", default=None, type=click.Choice(["ab_test", "did", "planning", "bayesian_ab"]), help="Filter by experiment mode")
 @click.option("--limit", default=20, type=int, help="Number of results to show (default: 20)")
 @click.option("--format", "output_format", type=click.Choice(["text", "json"]), default="text")
 def history(mode, limit, output_format):

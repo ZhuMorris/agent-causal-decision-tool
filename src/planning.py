@@ -57,7 +57,9 @@ def calculate_plan(input_data: dict) -> PlanningOutput:
     
     n = ratio_factor * (z_alpha + z_beta) ** 2 * p * (1 - p) / (absolute_mde ** 2)
     required_per_arm = ceil(n)
-    total_required = ceil(n * ratio_factor / 2)  # total across both arms
+    # total_required: sum of per-arm requirements across all arms
+    # = required_per_arm/r_control + required_per_arm/r_variant (weighted sum)
+    total_required = ceil(required_per_arm / r_control + required_per_arm / r_variant)
     
     # Duration
     daily_per_arm = daily_traffic

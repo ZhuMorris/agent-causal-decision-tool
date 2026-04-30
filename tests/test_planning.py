@@ -160,6 +160,39 @@ class TestPlanning:
         assert alloc["control"] == 0.5
         assert alloc["variant"] == 0.5
 
+
+    def test_custom_allocation_total_required_equals_sum_of_weighted_arms(self):
+        """total_required should equal required_per_arm/r_control + required_per_arm/r_variant"""
+        result = calculate_plan({
+            "baseline_conversion_rate": 0.02,
+            "mde_pct": 20,
+            "daily_traffic": 10000,
+            "confidence_level": 0.95,
+            "power": 0.8,
+            "allocation": "custom",
+            "allocation_ratio": "0.3/0.7"  # r_control=0.3, r_variant=0.7
+        })
+        required_per_arm = result.planning["required_sample_per_arm"]
+        total_required = result.planning["total_required"]
+        # Verify total_required matches weighted sum
+        expected_total = required_per_arm / 0.3 + required_per_arm / 0.7
+        assert total_required == __import__('math').ceil(expected_total)
+
+    def test_equal_allocation_total_required_reflects_ratio_factor_baked_into_per_arm(self):
+        """For equal allocation, ratio_factor=4 is already in per_arm, total = per_arm/r_c + per_arm/r_v = 4*per_arm"""
+        result = calculate_plan({
+            "baseline_conversion_rate": 0.02,
+            "mde_pct": 20,
+            "daily_traffic": 10000,
+            "confidence_level": 0.95,
+            "power": 0.8,
+            "allocation": "equal",
+        })
+        required_per_arm = result.planning["required_sample_per_arm"]
+        total_required = result.planning["total_required"]
+        # Equal 0.5/0.5: total = per_arm/0.5 + per_arm/0.5 = 4 * per_arm
+        assert total_required == required_per_arm / 0.5 + required_per_arm / 0.5
+
     def test_custom_allocation_rejects_invalid_ratio(self):
         """Invalid ratio (not summing to 1) should raise"""
         with pytest.raises(ValueError):

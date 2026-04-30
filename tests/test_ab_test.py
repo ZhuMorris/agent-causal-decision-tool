@@ -232,6 +232,48 @@ class TestSequentialEarlyStopping:
         assert result.sequential_summary.reason == "max_runtime_exceeded"
         assert result.recommendation.decision == "escalate"
 
+
+    def test_missing_timestamps_no_crash(self):
+        """Sequential enabled with missing timestamps → conditions_not_met, no crash"""
+        result = calculate_ab({
+            "control_conversions": 100,
+            "control_total": 5000,
+            "variant_conversions": 150,
+            "variant_total": 5000,
+            "sequential_enabled": True,
+            # No experiment_start_time / experiment_end_time
+            "min_runtime_days": 7,
+            "min_sample_per_arm": 2000,
+            "early_stop_p_threshold": 0.01,
+        })
+        # Must not crash; should fall through to conditions_not_met
+        assert result.sequential_reviewed is True
+        assert result.early_stop_applied is False
+        assert result.sequential_summary.reason == "conditions_not_met"
+        assert result.recommendation.decision in ["ship", "keep_running", "reject", "escalate"]
+        warning_codes = [w.code for w in result.warnings]
+        assert "sequential_conditions_not_met" in warning_codes
+
+    def test_invalid_timestamps_no_crash(self):
+        """Sequential enabled with unparseable timestamps → conditions_not_met, no crash"""
+        result = calculate_ab({
+            "control_conversions": 100,
+            "control_total": 5000,
+            "variant_conversions": 150,
+            "variant_total": 5000,
+            "sequential_enabled": True,
+            "experiment_start_time": "not-a-date",
+            "experiment_end_time": "also-not-a-date",
+            "min_runtime_days": 7,
+            "min_sample_per_arm": 2000,
+            "early_stop_p_threshold": 0.01,
+        })
+        assert result.sequential_reviewed is True
+        assert result.early_stop_applied is False
+        assert result.sequential_summary.reason == "conditions_not_met"
+        warning_codes = [w.code for w in result.warnings]
+        assert "sequential_conditions_not_met" in warning_codes
+
     def test_sequential_disabled_no_sequential_fields(self):
         """Sequential disabled → sequential_reviewed=False, sequential_summary=None"""
         result = calculate_ab({

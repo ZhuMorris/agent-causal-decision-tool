@@ -332,7 +332,10 @@ def _evaluate_sequential(
     if not (runtime_ok and sample_ok):
         reason_str = []
         if not runtime_ok:
-            reason_str.append(f"runtime {observed_runtime_days:.1f}d < {ab_input.min_runtime_days}d")
+            if observed_runtime_days is not None:
+                reason_str.append(f"runtime {observed_runtime_days:.1f}d < {ab_input.min_runtime_days}d")
+            else:
+                reason_str.append("runtime unknown (missing timestamps)")
         if not sample_ok:
             reason_str.append(f"sample {observed_sample_per_arm} < {ab_input.min_sample_per_arm}")
         seq_warning = WarningDetail(
