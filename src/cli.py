@@ -29,6 +29,8 @@ def main():
 @click.option("--samples", default=20000, type=int, help="Monte Carlo samples (default: 20000)")
 def bayes_ab(control, variant, name, output_format, auto_save, samples):
     """Run Bayesian A/B test using Beta-Binomial conjugate model"""
+    if samples < 1:
+        raise click.BadParameter("n_samples must be >= 1")
     try:
         c_parts = control.split("/")
         v_parts = variant.split("/")
@@ -450,7 +452,8 @@ def _print_bayes_text(result):
     click.echo(f"  Control:  Beta(α={pc['alpha']}, β={pc['beta']}) mean={pc['mean']:.4f}")
     click.echo(f"  Variant:  Beta(α={pv['alpha']}, β={pv['beta']}) mean={pv['mean']:.4f}")
     click.echo()
-    click.echo("Monte Carlo Results (20k samples):")
+    n_samples = stats["monte_carlo_samples"]
+    click.echo(f"Monte Carlo Results ({n_samples:,} samples):")
     click.echo(f"  P(Variant wins):  {stats['p_variant_wins']:.4f}")
     click.echo(f"  P(Control wins):  {stats['p_control_wins']:.4f}")
     click.echo(f"  P(Tie):           {stats['p_tie']:.4f}")
