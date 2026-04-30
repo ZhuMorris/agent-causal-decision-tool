@@ -5,7 +5,7 @@ metadata:
   {
     "openclaw": {
       "category": "data-science",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "tools": ["exec"],
       "requires": {
         "bins": ["python3", "git", "pip"],
