@@ -123,6 +123,167 @@ class TestABTest:
         assert len(result.next_steps) > 0
 
 
+class TestSequentialEarlyStopping:
+    """Tests for sequential / early stopping logic"""
+
+    def test_early_stop_applied_when_conditions_met_and_p_below_threshold(self):
+        """Sequential enabled, runtime/sample ok, p < threshold → early stop applied"""
+        result = calculate_ab({
+            "control_conversions": 100,
+            "control_total": 5000,
+            "variant_conversions": 150,
+            "variant_total": 5000,
+            "variant_name": "variant_1",
+            "sequential_enabled": True,
+            "experiment_start_time": "2026-04-01T00:00:00Z",
+            "experiment_end_time": "2026-04-15T00:00:00Z",  # 14 days
+            "min_runtime_days": 7,
+            "min_sample_per_arm": 2000,
+            "early_stop_p_threshold": 0.01,
+            "max_runtime_days": 30,
+        })
+        # 14 days runtime, 5000 per arm, p will be very small → early stop
+        assert result.sequential_reviewed is True
+        assert result.early_stop_applied is True
+        assert result.sequential_summary.reason == "p_below_threshold"
+        assert result.recommendation.decision == "ship"
+
+    def test_no_early_stop_before_min_runtime(self):
+        """Sequential enabled but only 3 days in → conditions not met, normal logic"""
+        result = calculate_ab({
+            "control_conversions": 100,
+            "control_total": 5000,
+            "variant_conversions": 150,
+            "variant_total": 5000,
+            "variant_name": "variant_1",
+            "sequential_enabled": True,
+            "experiment_start_time": "2026-04-01T00:00:00Z",
+            "experiment_end_time": "2026-04-04T00:00:00Z",  # 3 days < 7-day min
+            "min_runtime_days": 7,
+            "min_sample_per_arm": 2000,
+            "early_stop_p_threshold": 0.01,
+            "max_runtime_days": 30,
+        })
+        assert result.sequential_reviewed is True
+        assert result.early_stop_applied is False
+        assert result.sequential_summary.reason == "conditions_not_met"
+        # Decision from normal logic, not early-stop logic
+        assert result.recommendation.decision in ["ship", "keep_running", "reject", "escalate"]
+
+    def test_no_early_stop_before_min_sample(self):
+        """Sequential enabled but only 500 per arm → conditions not met"""
+        result = calculate_ab({
+            "control_conversions": 10,
+            "control_total": 500,
+            "variant_conversions": 15,
+            "variant_total": 500,
+            "variant_name": "variant_1",
+            "sequential_enabled": True,
+            "experiment_start_time": "2026-04-01T00:00:00Z",
+            "experiment_end_time": "2026-04-20T00:00:00Z",  # 19 days
+            "min_runtime_days": 7,
+            "min_sample_per_arm": 2000,  # 500 < 2000
+            "early_stop_p_threshold": 0.01,
+            "max_runtime_days": 30,
+        })
+        assert result.sequential_reviewed is True
+        assert result.early_stop_applied is False
+        assert result.sequential_summary.reason == "conditions_not_met"
+
+    def test_no_early_stop_when_p_not_significant(self):
+        """Sequential conditions met but p > threshold → no early stop, normal logic"""
+        result = calculate_ab({
+            "control_conversions": 100,
+            "control_total": 5000,
+            "variant_conversions": 105,  # small effect, not significant
+            "variant_total": 5000,
+            "variant_name": "variant_1",
+            "sequential_enabled": True,
+            "experiment_start_time": "2026-04-01T00:00:00Z",
+            "experiment_end_time": "2026-04-15T00:00:00Z",
+            "min_runtime_days": 7,
+            "min_sample_per_arm": 2000,
+            "early_stop_p_threshold": 0.01,
+            "max_runtime_days": 30,
+        })
+        assert result.sequential_reviewed is True
+        assert result.early_stop_applied is False
+        # p not small enough for early stop → normal inconclusive decision
+        assert result.recommendation.decision in ["keep_running", "escalate"]
+
+    def test_max_runtime_exceeded_escalates(self):
+        """Runtime exceeded max without strong result → escalate"""
+        result = calculate_ab({
+            "control_conversions": 100,
+            "control_total": 5000,
+            "variant_conversions": 105,
+            "variant_total": 5000,
+            "variant_name": "variant_1",
+            "sequential_enabled": True,
+            "experiment_start_time": "2026-04-01T00:00:00Z",
+            "experiment_end_time": "2026-04-25T00:00:00Z",  # 24 days > 21-day max
+            "min_runtime_days": 7,
+            "min_sample_per_arm": 2000,
+            "early_stop_p_threshold": 0.01,
+            "max_runtime_days": 21,
+        })
+        assert result.sequential_reviewed is True
+        assert result.early_stop_applied is False
+        assert result.sequential_summary.reason == "max_runtime_exceeded"
+        assert result.recommendation.decision == "escalate"
+
+    def test_sequential_disabled_no_sequential_fields(self):
+        """Sequential disabled → sequential_reviewed=False, sequential_summary=None"""
+        result = calculate_ab({
+            "control_conversions": 100,
+            "control_total": 5000,
+            "variant_conversions": 130,
+            "variant_total": 5000,
+        })
+        assert result.sequential_reviewed is False
+        assert result.early_stop_applied is False
+        assert result.sequential_summary is None
+
+    def test_early_stop_with_negative_lift_rejects(self):
+        """Early stop when p < threshold but lift is negative → reject"""
+        result = calculate_ab({
+            "control_conversions": 100,
+            "control_total": 5000,
+            "variant_conversions": 60,  # very strong negative, p ~ 0.003
+            "variant_total": 5000,
+            "variant_name": "variant_1",
+            "sequential_enabled": True,
+            "experiment_start_time": "2026-04-01T00:00:00Z",
+            "experiment_end_time": "2026-04-15T00:00:00Z",
+            "min_runtime_days": 7,
+            "min_sample_per_arm": 2000,
+            "early_stop_p_threshold": 0.01,
+            "max_runtime_days": 30,
+        })
+        assert result.early_stop_applied is True
+        assert result.sequential_summary.reason == "p_below_threshold"
+        assert result.recommendation.decision == "reject"
+
+    def test_early_stop_warning_in_warnings(self):
+        """Early stop applied → warning with code 'early_stop_applied'"""
+        result = calculate_ab({
+            "control_conversions": 100,
+            "control_total": 5000,
+            "variant_conversions": 150,
+            "variant_total": 5000,
+            "variant_name": "variant_1",
+            "sequential_enabled": True,
+            "experiment_start_time": "2026-04-01T00:00:00Z",
+            "experiment_end_time": "2026-04-15T00:00:00Z",
+            "min_runtime_days": 7,
+            "min_sample_per_arm": 2000,
+            "early_stop_p_threshold": 0.01,
+            "max_runtime_days": 30,
+        })
+        warning_codes = [w.code for w in result.warnings]
+        assert "early_stop_applied" in warning_codes
+
+
 class TestABTestEdgeCases:
     """Edge cases for A/B testing"""
 

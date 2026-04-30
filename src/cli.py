@@ -66,18 +66,34 @@ def bayes_ab(control, variant, name, output_format, auto_save, samples):
 @click.option("--name", default="variant_1", help="Variant name")
 @click.option("--format", "output_format", type=click.Choice(["json", "text"]), default="json")
 @click.option("--save", "auto_save", is_flag=True, help="Save result to experiment history")
-def ab_test(control, variant, name, output_format, auto_save):
-    """Run A/B test analysis"""
+# Sequential early stopping options
+@click.option("--sequential/--no-sequential", "sequential_enabled", default=False, help="Enable sequential early stopping")
+@click.option("--experiment-start", "experiment_start_time", default=None, help="Experiment start ISO 8601 timestamp")
+@click.option("--experiment-end", "experiment_end_time", default=None, help="Experiment end ISO 8601 timestamp")
+@click.option("--min-runtime-days", "min_runtime_days", default=7, type=int, help="Minimum days before early stop (default: 7)")
+@click.option("--min-sample-per-arm", "min_sample_per_arm", default=2000, type=int, help="Minimum sample per arm before early stop (default: 2000)")
+@click.option("--early-stop-p", "early_stop_p_threshold", default=0.01, type=float, help="p-value threshold for early stop (default: 0.01)")
+@click.option("--max-runtime-days", "max_runtime_days", default=None, type=int, help="Hard cap on runtime in days; escalate if exceeded")
+def ab_test(control, variant, name, output_format, auto_save, sequential_enabled, experiment_start_time, experiment_end_time, min_runtime_days, min_sample_per_arm, early_stop_p_threshold, max_runtime_days):
+    """Run A/B test analysis with optional sequential early stopping"""
     try:
         c_parts = control.split("/")
         v_parts = variant.split("/")
+
         
         input_data = {
             "control_conversions": int(c_parts[0]),
             "control_total": int(c_parts[1]),
             "variant_conversions": int(v_parts[0]),
             "variant_total": int(v_parts[1]),
-            "variant_name": name
+            "variant_name": name,
+            "sequential_enabled": sequential_enabled,
+            "experiment_start_time": experiment_start_time,
+            "experiment_end_time": experiment_end_time,
+            "min_runtime_days": min_runtime_days,
+            "min_sample_per_arm": min_sample_per_arm,
+            "early_stop_p_threshold": early_stop_p_threshold,
+            "max_runtime_days": max_runtime_days,
         }
     except (ValueError, IndexError) as e:
         click.echo(f"Error parsing input: {e}", err=True)
@@ -104,13 +120,21 @@ def ab_test(control, variant, name, output_format, auto_save):
 @click.option("--post-treated", required=True, type=float, help="Treated group metric after treatment")
 @click.option("--format", "output_format", type=click.Choice(["json", "text"]), default="json")
 @click.option("--save", "auto_save", is_flag=True, help="Save result to experiment history")
-def did_analysis(pre_control, post_control, pre_treated, post_treated, output_format, auto_save):
-    """Run Difference-in-Differences analysis"""
+@click.option("--pre-periods", "pre_periods", default=None, type=int, help="Number of pre-period observations (e.g. days/weeks)")
+@click.option("--post-periods", "post_periods", default=None, type=int, help="Number of post-period observations")
+@click.option("--treatment-obs", "treatment_observation_count", default=None, type=int, help="Total underlying observations for treatment group")
+@click.option("--control-obs", "control_observation_count", default=None, type=int, help="Total underlying observations for control group")
+def did_analysis(pre_control, post_control, pre_treated, post_treated, output_format, auto_save, pre_periods, post_periods, treatment_observation_count, control_observation_count):
+    """Run Difference-in-Differences analysis with robustness diagnostics"""
     input_data = {
         "pre_control": pre_control,
         "post_control": post_control,
         "pre_treated": pre_treated,
-        "post_treated": post_treated
+        "post_treated": post_treated,
+        "pre_periods": pre_periods,
+        "post_periods": post_periods,
+        "treatment_observation_count": treatment_observation_count,
+        "control_observation_count": control_observation_count,
     }
     
     result = calculate_did(input_data)
@@ -364,6 +388,18 @@ def _print_ab_text(result):
         for w in result.warnings:
             click.echo(f"  [{w.severity.upper()}] {w.code}: {w.message}")
     
+    if result.sequential_reviewed and result.sequential_summary:
+        click.echo()
+        click.echo("Sequential Early Stopping:")
+        ss = result.sequential_summary
+        click.echo(f"  Reviewed:            {result.sequential_reviewed}")
+        click.echo(f"  Early stop applied:  {result.early_stop_applied}")
+        click.echo(f"  Reason:             {ss.reason}")
+        if ss.observed_runtime_days is not None:
+            click.echo(f"  Runtime:             {ss.observed_runtime_days:.1f}d / {ss.min_runtime_days}d min")
+        click.echo(f"  Sample per arm:      {ss.observed_sample_per_arm} / {ss.min_sample_per_arm} min")
+        click.echo(f"  p threshold:         {ss.early_stop_p_threshold}")
+    
     click.echo()
     click.echo("Next steps:")
     for step in result.next_steps:
@@ -422,6 +458,23 @@ def _print_did_text(result):
         click.echo("Warnings:")
         for w in result.warnings:
             click.echo(f"  [{w.severity.upper()}] {w.code}: {w.message}")
+    
+    if result.did_diagnostics:
+        click.echo()
+        click.echo("DiD Diagnostics:")
+        diag = result.did_diagnostics
+        click.echo(f"  Pre periods:              {diag.pre_periods}")
+        click.echo(f"  Post periods:            {diag.post_periods}")
+        click.echo(f"  Treatment obs count:     {diag.treatment_observation_count}")
+        click.echo(f"  Control obs count:       {diag.control_observation_count}")
+        click.echo(f"  Parallel trends evidence: {diag.parallel_trends_evidence}")
+        click.echo(f"  Caution level:            {diag.recommended_caution_level}")
+        if diag.fragility_flags:
+            click.echo(f"  Fragility flags:          {', '.join(diag.fragility_flags)}")
+    
+    if result.explanation:
+        click.echo()
+        click.echo(f"Explanation: {result.explanation}")
     
     click.echo()
     click.echo("Assumptions:")

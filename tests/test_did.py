@@ -144,6 +144,7 @@ class TestDiDEdgeCases:
         # DiD = 0, should escalate due to small effect
         assert result.recommendation.decision in ["escalate", "keep_running"]
 
+
     def test_both_grow_same_rate(self):
         """Parallel growth - no treatment effect"""
         result = calculate_did({
@@ -154,3 +155,149 @@ class TestDiDEdgeCases:
         })
         # DiD = 0, parallel trends
         assert result.statistics["did_estimate"] == 0
+
+
+class TestDiDDiagnostics:
+    """Tests for DiD diagnostics and fragility flags"""
+
+    def test_single_pre_period_high_caution(self):
+        """Only one pre-period → high caution + fragility flag"""
+        result = calculate_did({
+            "pre_control": 1000,
+            "post_control": 1100,
+            "pre_treated": 900,
+            "post_treated": 1150,
+            "pre_periods": 1,
+            "post_periods": 1,
+        })
+        assert result.did_diagnostics is not None
+        assert result.did_diagnostics.recommended_caution_level == "high"
+        assert "single_pre_period" in result.did_diagnostics.fragility_flags
+
+    def test_small_sample_small_effect_medium_caution(self):
+        """Small obs count + modest DiD → medium caution (small_sample without large_effect_small_sample)"""
+        result = calculate_did({
+            "pre_control": 1000,
+            "post_control": 1001,
+            "pre_treated": 900,
+            "post_treated": 901,  # DiD = 0 (near-zero effect → won't trigger large_effect_small_sample)
+            "pre_periods": 3,
+            "post_periods": 3,
+            "treatment_observation_count": 50,  # < 100 → small_sample
+            "control_observation_count": 50,
+        })
+        # Both counts < 100 → small_sample; |did_estimate| ≈ 0 → large_effect_small_sample NOT triggered
+        assert result.did_diagnostics.recommended_caution_level == "medium"
+        assert "small_sample" in result.did_diagnostics.fragility_flags
+
+    def test_imbalanced_groups_causes_medium_caution(self):
+        """Imbalanced groups (ratio > 3x) → medium caution via imbalanced_groups flag"""
+        result = calculate_did({
+            "pre_control": 1000,
+            "post_control": 1050,
+            "pre_treated": 900,
+            "post_treated": 940,
+            "pre_periods": 3,
+            "post_periods": 3,
+            "treatment_observation_count": 200,  # ≥ 100: no small_sample
+            "control_observation_count": 50,     # < 100: small_sample; 200/50=4 > 3: imbalanced
+        })
+        assert result.did_diagnostics.recommended_caution_level == "medium"
+        assert "imbalanced_groups" in result.did_diagnostics.fragility_flags
+
+    def test_imbalanced_groups_medium_caution(self):
+        """Imbalanced groups (ratio > 3x) → medium caution"""
+        result = calculate_did({
+            "pre_control": 1000,
+            "post_control": 1100,
+            "pre_treated": 900,
+            "post_treated": 1150,
+            "pre_periods": 3,
+            "post_periods": 3,
+            "treatment_observation_count": 1000,
+            "control_observation_count": 100,  # 10x ratio
+        })
+        assert result.did_diagnostics.recommended_caution_level == "medium"
+        assert "imbalanced_groups" in result.did_diagnostics.fragility_flags
+
+    def test_large_effect_small_sample_high_caution(self):
+        """Large effect + small sample → high caution"""
+        result = calculate_did({
+            "pre_control": 100,
+            "post_control": 100,
+            "pre_treated": 100,
+            "post_treated": 200,  # big DiD effect
+            "pre_periods": 2,
+            "post_periods": 2,
+            "treatment_observation_count": 50,
+            "control_observation_count": 50,
+        })
+        assert result.did_diagnostics.recommended_caution_level == "high"
+        assert "large_effect_small_sample" in result.did_diagnostics.fragility_flags
+
+
+    def test_multiple_pre_periods_moderate_trends_evidence(self):
+        """3+ pre-periods → moderate parallel trends evidence"""
+        result = calculate_did({
+            "pre_control": 1000,
+            "post_control": 1100,
+            "pre_treated": 900,
+            "post_treated": 1150,
+            "pre_periods": 4,
+            "post_periods": 2,
+        })
+        assert result.did_diagnostics.parallel_trends_evidence == "moderate"
+
+    def test_caution_high_ship_becomes_escalate(self):
+        """Positive effect but high caution → decision changes to escalate"""
+        result = calculate_did({
+            "pre_control": 100,
+            "post_control": 100,
+            "pre_treated": 100,
+            "post_treated": 200,  # strong positive
+            "pre_periods": 1,      # single pre-period = high caution
+            "post_periods": 1,
+            "treatment_observation_count": 30,
+            "control_observation_count": 30,
+        })
+        # Effect looks positive but caution=high → should escalate
+        assert result.did_diagnostics.recommended_caution_level == "high"
+        assert result.recommendation.decision == "escalate"
+
+    def test_explanation_provided(self):
+        """DiD output should include plain-language explanation"""
+        result = calculate_did({
+            "pre_control": 1000,
+            "post_control": 1100,
+            "pre_treated": 900,
+            "post_treated": 1150,
+            "pre_periods": 3,
+            "post_periods": 2,
+        })
+        assert result.explanation is not None
+        assert len(result.explanation) > 0
+
+    def test_recommended_next_action_provided(self):
+        """DiD output should include recommended next action"""
+        result = calculate_did({
+            "pre_control": 1000,
+            "post_control": 1100,
+            "pre_treated": 900,
+            "post_treated": 1150,
+        })
+        assert result.recommended_next_action is not None
+
+    def test_no_did_diagnostics_when_metadata_absent(self):
+        """Diagnostics still computed even without metadata (all nullable fields)"""
+        result = calculate_did({
+            "pre_control": 1000,
+            "post_control": 1100,
+            "pre_treated": 900,
+            "post_treated": 1150,
+            # no pre_periods, post_periods, observation counts
+        })
+        assert result.did_diagnostics is not None
+        # No metadata → unknown evidence level, low caution, no fragility flags
+        assert result.did_diagnostics.parallel_trends_evidence == "none"
+        assert result.did_diagnostics.recommended_caution_level == "low"
+        assert len(result.did_diagnostics.fragility_flags) == 0

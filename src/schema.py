@@ -12,6 +12,16 @@ class ABTestInput(BaseModel):
     variant_conversions: int = Field(..., description="Conversions in variant group")
     variant_total: int = Field(..., description="Total users in variant group")
     variant_name: Optional[str] = Field(default="variant_1", description="Name of variant")
+    # Sequential / early stopping settings
+    sequential_enabled: bool = Field(default=False, description="Enable sequential early stopping logic")
+    experiment_start_time: Optional[str] = Field(default=None, description="ISO 8601 start timestamp")
+    experiment_end_time: Optional[str] = Field(default=None, description="ISO 8601 end timestamp")
+    min_runtime_days: int = Field(default=7, description="Minimum days before early stop is considered")
+    min_sample_per_arm: int = Field(default=2000, description="Minimum sample per arm before early stop is considered")
+    early_stop_p_threshold: float = Field(default=0.01, description="p-value threshold for early stop (conservative)")
+    max_runtime_days: Optional[int] = Field(default=None, description="Hard cap on runtime; escalate if exceeded without strong result")
+    # Override for practical significance threshold
+    practical_significance_threshold: float = Field(default=0.01, description="Practical significance threshold for lift")
 
 
 class DIDInput(BaseModel):
@@ -20,6 +30,12 @@ class DIDInput(BaseModel):
     post_control: float = Field(..., description="Control group metric after treatment")
     pre_treated: float = Field(..., description="Treated group metric before treatment")
     post_treated: float = Field(..., description="Treated group metric after treatment")
+    # DiD diagnostics metadata
+    pre_periods: Optional[int] = Field(default=None, description="Number of pre-period observations (e.g. days/weeks)")
+    post_periods: Optional[int] = Field(default=None, description="Number of post-period observations")
+    treatment_observation_count: Optional[int] = Field(default=None, description="Total underlying observations for treatment")
+    control_observation_count: Optional[int] = Field(default=None, description="Total underlying observations for control")
+    notes: Optional[str] = Field(default=None, description="Context string passed through to audit only")
 
 
 class Recommendation(BaseModel):
@@ -49,6 +65,19 @@ class TrafficStats(BaseModel):
     total_size: int
 
 
+# ─── Sequential Early Stopping ────────────────────────────────────────────────
+
+class SequentialSummary(BaseModel):
+    """Summary of sequential early stopping evaluation"""
+    min_runtime_days: int
+    observed_runtime_days: Optional[float] = None
+    min_sample_per_arm: int
+    observed_sample_per_arm: int
+    early_stop_p_threshold: float
+    max_runtime_days: Optional[int] = None
+    reason: Literal["conditions_not_met", "p_below_threshold", "max_runtime_exceeded", "no_early_stop"]
+
+
 class ABTestOutput(BaseModel):
     """A/B test output schema"""
     version: str = "1.0"
@@ -61,6 +90,10 @@ class ABTestOutput(BaseModel):
     next_steps: list[str] = Field(..., description="Suggested next steps")
     audit: dict = Field(..., description="Audit record")
     inputs: dict = Field(..., description="Original inputs for audit")
+    # Sequential early stopping fields
+    sequential_reviewed: bool = Field(default=False, description="Whether sequential logic was evaluated")
+    early_stop_applied: bool = Field(default=False, description="Whether early stop was triggered")
+    sequential_summary: Optional[SequentialSummary] = Field(default=None, description="Sequential evaluation details")
 
 
 class PlanningInput(BaseModel):
@@ -85,6 +118,19 @@ class PlanningOutput(BaseModel):
     inputs: dict
 
 
+# ─── DiD Diagnostics ─────────────────────────────────────────────────────────
+
+class DIDDiagnostics(BaseModel):
+    """DiD setup quality and fragility diagnostics"""
+    pre_periods: Optional[int] = None
+    post_periods: Optional[int] = None
+    treatment_observation_count: Optional[int] = None
+    control_observation_count: Optional[int] = None
+    parallel_trends_evidence: Literal["none", "weak", "moderate", "strong"] = "none"
+    fragility_flags: list[str] = Field(default_factory=list)
+    recommended_caution_level: Literal["low", "medium", "high"] = "low"
+
+
 class DIDOutput(BaseModel):
     """DiD output schema"""
     version: str = "1.0"
@@ -98,3 +144,7 @@ class DIDOutput(BaseModel):
     audit: dict = Field(..., description="Audit record")
     inputs: dict = Field(..., description="Original inputs for audit")
     assumptions: list[str] = Field(..., description="DiD assumptions that must hold")
+    # DiD diagnostics
+    did_diagnostics: Optional[DIDDiagnostics] = Field(default=None, description="DiD setup quality diagnostics")
+    recommended_next_action: Optional[str] = Field(default=None, description="Suggested next action based on diagnostics")
+    explanation: Optional[str] = Field(default=None, description="Plain-language explanation of result and caution level")
