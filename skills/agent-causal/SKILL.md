@@ -5,7 +5,7 @@ metadata:
   {
     "openclaw": {
       "category": "data-science",
-      "version": "0.5.0",
+      "version": "0.5.2",
       "license": "Apache-2.0",
       "tools": ["exec"],
       "requires": {
