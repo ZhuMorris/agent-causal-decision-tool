@@ -118,12 +118,25 @@ def delete_experiment(experiment_id: int) -> bool:
 
 
 def compare_experiments(experiment_ids: list) -> dict:
-    """Compare multiple experiments by ID. Returns comparison summary."""
+    """Compare multiple experiments by ID. Returns comparison summary.
+
+    Security note: experiment_ids are passed as parameterized arguments to the
+    SQL IN-clause via sqlite3's ? placeholder binding. The placeholder string
+    ({placeholders}) contains only ? characters — no user data is ever
+    interpolated into the SQL text itself. We additionally enforce int IDs
+    and reject empty lists as defense-in-depth.
+    """
+    if not experiment_ids:
+        return {"error": "Need at least 1 experiment ID to compare"}
+
+    # Enforce int IDs — no string injection possible
+    int_ids = [int(x) for x in experiment_ids]
+
     conn = _get_db()
-    placeholders = ",".join(["?"] * len(experiment_ids))
+    placeholders = ",".join(["?"] * len(int_ids))
     rows = conn.execute(
-        f"SELECT * FROM experiments WHERE id IN ({placeholders})",
-        experiment_ids
+        f"SELECT * FROM experiments WHERE id IN ({placeholders})",  # nosec: B608 — placeholders is hardcoded "?" string, int_ids are coerced, parameterized query used
+        int_ids
     ).fetchall()
     conn.close()
 
