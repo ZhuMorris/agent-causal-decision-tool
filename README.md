@@ -42,6 +42,7 @@ Use this tool whenever you or your agents have experiment or rollout results and
 - **Frequentist A/B Testing** — Z-test with decision path and warnings
 - **Bayesian A/B Testing** — Beta-Binomial conjugate model with Monte Carlo simulation
 - **Difference-in-Differences** — Quasi-experimental analysis for non-randomized settings
+- **Cohort Breakdown Analysis** — Segment-level analysis with Benjamini-Hochberg correction and decision override
 - **Decision Audit** — Step-by-step audit trail with experiment maturity scoring
 - **Persistent History** — SQLite-backed experiment history and comparison
 
@@ -192,6 +193,29 @@ All commands return structured JSON:
 
 ---
 
+### Cohort Breakdown Analysis (`cohort-breakdown`)
+
+Segment-level A/B analysis with Benjamini-Hochberg correction for multiple comparisons:
+
+```bash
+PYTHONPATH=. python3 -m src.cli cohort-breakdown --segments seg_a.json seg_b.json
+
+# Or pass JSON directly via stdin
+echo '[{"segment_name":"seg_a","control_conversions":100,"control_total":1000,"variant_conversions":130,"variant_total":1000}]' | PYTHONPATH=. python3 -m src.cli cohort-breakdown
+
+# Validate segment data
+PYTHONPATH=. python3 -m src.cli validate-input --file segments.json
+```
+
+**Segmentation correction policy (PRD v2.2):**
+- 2–3 segments: no correction
+- 4+ segments: Benjamini-Hochberg (controls FDR, less conservative)
+- 5+ segments: Bonferroni available as optional override (with conservative warning)
+
+**Outputs:** `p_value_raw`, `p_value_adjusted`, `cohort_decision_override`, `interaction_flag`, `priority_rank`, `next_analysis_suggestion`
+
+---
+
 ## Python API
 
 ```python
@@ -201,6 +225,7 @@ sys.path.insert(0, '~/clawd/agent-causal-decision-tool')
 from src.ab_test import calculate_ab
 from src.bayes import calculate_bayes_ab
 from src.did import calculate_did
+from src.cohort import cohort_breakdown
 from src.planning import calculate_plan
 
 # Frequentist A/B
@@ -218,6 +243,33 @@ result = calculate_bayes_ab({
 })
 if result["recommendation"]["decision"] == "ship":
     pass  # Deploy
+
+# Difference-in-Differences
+result = calculate_did({
+    "pre_control": 1000, "post_control": 1100,
+    "pre_treated": 900, "post_treated": 1150
+})
+
+# Cohort Breakdown
+result = cohort_breakdown({
+    "experiment_id": "exp-001",
+    "metric": "conversion_rate",
+    "segments": [
+        {
+            "segment_name": "new_users",
+            "control_conversions": 100, "control_total": 1000,
+            "variant_conversions": 130, "variant_total": 1000,
+        },
+        {
+            "segment_name": "returning_users",
+            "control_conversions": 200, "control_total": 2000,
+            "variant_conversions": 190, "variant_total": 2000,
+        },
+    ],
+    "prior_decision": "keep_running",
+})
+if result.get("cohort_decision_override"):
+    print(f"Override triggered: {result['cohort_override_reason']}")
 
 # Planning
 result = calculate_plan({
@@ -238,8 +290,11 @@ cd agent-causal-decision-tool
 pip install -e .
 pip install click scipy numpy pydantic pytest
 
-# Run tests
+# Run all tests
 pytest tests/ -v
+
+# Run cohort tests specifically
+pytest tests/test_cohort.py -v
 
 # Run CLI
 PYTHONPATH=. python3 -m src.cli --help

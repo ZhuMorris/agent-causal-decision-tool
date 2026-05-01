@@ -64,8 +64,11 @@ def cohort_breakdown(input_data: dict) -> dict:
             c_conv, c_total, v_conv, v_total, alpha=alpha
         )
 
-        # Sample size warning
-        seg_warnings = sample_size_warning(c_total, v_total, min_sample_per_segment)
+        # Sample size warning (deserialize Pydantic objects to dicts for JSON output)
+        seg_warnings = [
+            {"code": w.code, "message": w.message, "severity": w.severity}
+            for w in sample_size_warning(c_total, v_total, min_sample_per_segment)
+        ]
 
         # Segment decision
         decision, _ = segment_decision(
@@ -106,13 +109,15 @@ def cohort_breakdown(input_data: dict) -> dict:
             ):
                 seg["decision"] = "neutral"
                 seg["warnings"] = seg.get("warnings", [])
-                if "multiple_comparison_adjusted" not in seg["warnings"]:
-                    seg["warnings"].append("multiple_comparison_adjusted: BH correction removed significance")
+                if "multiple_comparison_adjusted" not in [w["code"] for w in seg["warnings"]]:
+                    seg["warnings"].append({"code": "multiple_comparison_adjusted", "message": "BH correction removed significance", "severity": "warning"})
     elif n_segs >= 5 and multiple_comparison_method == "bonferroni":
         p_adjusted = [p * n_segs for p in p_values_raw]
         correction_method = "bonferroni"
         all_warnings.append(
-            "bonferroni_conservative_warning: Bonferroni correction may suppress true positives with many segments"
+            {"code": "bonferroni_conservative_warning",
+             "message": "Bonferroni correction may suppress true positives with many segments",
+             "severity": "warning"}
         )
         for i, seg in enumerate(segments_out):
             seg["p_value_adjusted"] = min(p_adjusted[i], 1.0)
@@ -121,8 +126,8 @@ def cohort_breakdown(input_data: dict) -> dict:
             ):
                 seg["decision"] = "neutral"
                 seg["warnings"] = seg.get("warnings", [])
-                if "multiple_comparison_adjusted" not in seg["warnings"]:
-                    seg["warnings"].append("multiple_comparison_adjusted: Bonferroni correction removed significance")
+                if "multiple_comparison_adjusted" not in [w["code"] for w in seg["warnings"]]:
+                    seg["warnings"].append({"code": "multiple_comparison_adjusted", "message": "Bonferroni correction removed significance", "severity": "warning"})
     else:
         correction_method = "none" if n_segs <= 3 else "benjamini_hochberg"
         for seg in segments_out:
@@ -153,24 +158,23 @@ def cohort_breakdown(input_data: dict) -> dict:
     cohort_decision_override = False
     cohort_override_reason = None
 
-    if prior_decision in ("wait", "escalate", "keep_running", "reject"):
-        for seg in segments_out:
-            if seg["decision"] == "strongly_positive":
-                cohort_decision_override = True
-                cohort_override_reason = (
-                    f"Strong positive signal in '{seg['segment_name']}' "
-                    f"(lift={seg['relative_lift_pct']:.1f}%, adj-p={seg['p_value_adjusted']:.4f}) "
-                    f"contradicts aggregate decision '{prior_decision}'"
-                )
-                break
-            elif seg["decision"] == "strongly_negative" and prior_decision in ("ship", "wait"):
-                cohort_decision_override = True
-                cohort_override_reason = (
-                    f"Strong negative signal in '{seg['segment_name']}' "
-                    f"(lift={seg['relative_lift_pct']:.1f}%) "
-                    f"contradicts aggregate decision '{prior_decision}'"
-                )
-                break
+    for seg in segments_out:
+        if seg["decision"] == "strongly_positive" and prior_decision in ("wait", "escalate", "keep_running", "reject"):
+            cohort_decision_override = True
+            cohort_override_reason = (
+                f"Strong positive signal in '{seg['segment_name']}' "
+                f"(lift={seg['relative_lift_pct']:.1f}%, adj-p={seg['p_value_adjusted']:.4f}) "
+                f"contradicts aggregate decision '{prior_decision}'"
+            )
+            break
+        elif seg["decision"] == "strongly_negative" and prior_decision in ("ship", "wait"):
+            cohort_decision_override = True
+            cohort_override_reason = (
+                f"Strong negative signal in '{seg['segment_name']}' "
+                f"(lift={seg['relative_lift_pct']:.1f}%) "
+                f"contradicts aggregate decision '{prior_decision}'"
+            )
+            break
 
     # ── Summary & recommended action ───────────────────────────────────────
     positive = [s for s in segments_out if s["decision"] in ("strongly_positive", "positive")]
@@ -198,13 +202,17 @@ def cohort_breakdown(input_data: dict) -> dict:
 
     # ── Warnings ─────────────────────────────────────────────────────────────
     if n_segs >= 4:
-        all_warnings.append(
-            f"multiple_comparisons: {n_segs} segments tested, correction={correction_method}"
-        )
+        all_warnings.append({
+            "code": "multiple_comparisons",
+            "message": f"{n_segs} segments tested, correction={correction_method}",
+            "severity": "info"
+        })
     if interaction_flag:
-        all_warnings.append(
-            f"interaction_flag: segments show opposing directions — possible interaction effect"
-        )
+        all_warnings.append({
+            "code": "interaction_flag",
+            "message": "Segments show opposing directions — possible interaction effect",
+            "severity": "warning"
+        })
 
     # ── Audit ─────────────────────────────────────────────────────────────────
     segment_def_notes_present = all(
