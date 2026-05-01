@@ -20,7 +20,7 @@ This tool wraps a few standard methods into one consistent, agent‑friendly int
 - **Bayesian A/B testing** when you want answers like "there is a 93% chance B is better than A" instead of only p‑values.
 - **Difference‑in‑differences (DiD)** for quasi‑experiments like staged rollouts or region‑based launches where you cannot randomize perfectly.
 - **Planning and power checks** so you can see if a test is realistic before you start it.
-- **Decision audit** so humans can see what the agent did, why it did it, and how strong the evidence really was.
+- **Decision audit** so humans can see what the agent did, why it did it, and how strong the evidence really was..
 
 The goal is not to replace your analytics stack, but to give agents a small, reliable decision block they can call inside workflows.
 
@@ -44,7 +44,7 @@ Use this tool whenever you or your agents have experiment or rollout results and
 - **Difference-in-Differences** — Quasi-experimental analysis for non-randomized settings
 - **Cohort Breakdown Analysis** — Segment-level analysis with Benjamini-Hochberg correction and decision override
 - **Decision Audit** — Step-by-step audit trail with experiment maturity scoring
-- **Persistent History** — SQLite-backed experiment history and comparison
+- **Persistent History** — SQLite-backed experiment history and comparison.
 
 ## Installation
 
