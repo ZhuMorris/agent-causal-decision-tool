@@ -203,7 +203,7 @@ def calculate_ab(input_data: dict) -> ABTestOutput:
             "step": "Traffic check",
             "passed": bool(c_total >= min_sample and v_total >= min_sample),
             "details": {"control_size": int(c_total), "variant_size": int(v_total), "min_required": int(min_sample)},
-            "warning": f"Traffic low" if bool(c_total < min_sample or v_total < min_sample) else None,
+            "warning": "Traffic low" if bool(c_total < min_sample or v_total < min_sample) else None,
             "severity": "warning"
         },
         {

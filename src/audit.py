@@ -289,8 +289,8 @@ def audit_did(inputs: dict, result: dict) -> dict:
         audit.add_limitation("Parallel trends assumption may not hold")
     
     # Step 4: Effect size check
-    strong_positive = relative_did > 10
-    strong_negative = relative_did < -10
+    _strong_positive = relative_did > 10
+    _strong_negative = relative_did < -10
     small_effect = abs(relative_did) < 5
     
     audit.add_step(AuditStep(
@@ -404,7 +404,7 @@ def check_experiment_maturity(audit: dict, result: dict) -> dict:
         maturity_issues.append(f"Decision path has only {len(decision_path)} steps — may be under-documented")
     
     # 7. Check for unacknowledged limitations
-    has_critical_assumption = any("parallel trends" in l.lower() or "randomized" in l.lower() for l in limitations)
+    has_critical_assumption = any("parallel trends" in lim.lower() or "randomized" in lim.lower() for lim in limitations)
     if not has_critical_assumption and mode in ("did",):
         maturity_score -= 10
         maturity_warnings.append(f"{mode} mode but key assumptions not documented")
@@ -479,8 +479,8 @@ def format_audit_text(audit: dict) -> str:
     
     if audit["limitations"]:
         lines.append("-- LIMITATIONS --")
-        for l in audit["limitations"]:
-            lines.append(f"  - {l}")
+        for lim in audit["limitations"]:
+            lines.append(f"  - {lim}")
         lines.append("")
     
     fd = audit["final_decision"]

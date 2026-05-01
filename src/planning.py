@@ -1,7 +1,7 @@
 """Experiment planning module for Agent Causal Decision Tool"""
 
 import json
-from math import sqrt, ceil
+from math import ceil
 from schema import PlanningInput, PlanningOutput, Recommendation, WarningDetail
 
 

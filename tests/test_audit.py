@@ -1,6 +1,5 @@
 """Tests for audit module and maturity assessment"""
 
-import pytest
 from src.audit import check_experiment_maturity
 
 

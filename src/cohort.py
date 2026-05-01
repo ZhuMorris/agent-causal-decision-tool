@@ -4,15 +4,12 @@ Applies per-segment two-proportion z-tests with Benjamini-Hochberg correction
 for 4+ segments. Links to prior ab_compare or did_estimate results for full
 audit chain traceability.
 """
-import json
 from datetime import datetime
 from typing import Optional
 
-from schema import ABTestOutput
 from utils.stats import (
     two_proportion_z_test,
     benjamini_hochberg,
-    bonferroni_warning,
     segment_decision,
     sample_size_warning,
 )
@@ -179,7 +176,6 @@ def cohort_breakdown(input_data: dict) -> dict:
     # ── Summary & recommended action ───────────────────────────────────────
     positive = [s for s in segments_out if s["decision"] in ("strongly_positive", "positive")]
     negative = [s for s in segments_out if s["decision"] in ("strongly_negative", "negative")]
-    neutral = [s for s in segments_out if s["decision"] == "neutral"]
 
     if positive and not negative:
         seg_summary = f"{len(positive)} segment(s) positive"
@@ -265,7 +261,6 @@ def _build_rationale(seg: dict) -> str:
     lift = seg["relative_lift_pct"]
     p_raw = seg["p_value_raw"]
     p_adj = seg["p_value_adjusted"]
-    name = seg["segment_name"]
 
     if d == "strongly_positive":
         return f"Strong positive effect (lift={lift:.1f}%, adj-p={p_adj:.4f}). Highest priority."

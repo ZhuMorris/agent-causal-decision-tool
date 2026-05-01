@@ -1,19 +1,18 @@
 """Tests for persistent storage / store module"""
 
-import pytest
+import importlib
 import json
-import os
 import tempfile
 from pathlib import Path
 
-# Patch DB_PATH to a temp file for isolation
+# Patch DB_PATH to a temp file for isolation BEFORE importing store
 _temp_db = tempfile.NamedTemporaryFile(delete=False, suffix=".db")
 _temp_db.close()
-import store as store_module
-store_module.DB_PATH = Path(_temp_db.name)
 
+import store as store_module  # noqa: E402
+
+store_module.DB_PATH = Path(_temp_db.name)
 # Force re-init with temp path
-import importlib
 importlib.reload(store_module)
 
 

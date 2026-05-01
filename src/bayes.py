@@ -107,7 +107,7 @@ def calculate_bayes_ab(input_data: dict, n_samples: int = 20000) -> dict:
         else:
             decision = "escalate"
             confidence = "low"
-            summary = f"Results inverted unexpectedly. Escalate for review."
+            summary = "Results inverted unexpectedly. Escalate for review."
     else:
         decision = "keep_running"
         confidence = "low"

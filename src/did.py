@@ -1,8 +1,6 @@
 """Difference-in-Differences analysis module"""
 
 import json
-from math import sqrt
-from typing import Optional
 from schema import DIDInput, DIDOutput, Recommendation, WarningDetail, DIDDiagnostics
 
 
@@ -82,7 +80,7 @@ def calculate_did(input_data: dict) -> DIDOutput:
         else:
             decision = "escalate"
             confidence = "low"
-            summary = f"Effect looks positive but critical warnings exist. Escalate."
+            summary = "Effect looks positive but critical warnings exist. Escalate."
     elif relative_did < -10:
         decision = "reject"
         confidence = "medium"
@@ -119,7 +117,7 @@ def calculate_did(input_data: dict) -> DIDOutput:
             ))
         if decision == "ship":
             decision = "escalate"
-            summary = f"Effect is positive but caution level is high — escalate for human review."
+            summary = "Effect is positive but caution level is high — escalate for human review."
 
     recommendation = Recommendation(
         decision=decision,

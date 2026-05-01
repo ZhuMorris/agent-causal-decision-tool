@@ -4,7 +4,7 @@ import click
 import json
 import sys
 from pathlib import Path
-from importlib.metadata import version, PackageNotFoundError
+from importlib.metadata import version as _pkg_version, PackageNotFoundError
 
 from ab_test import calculate_ab
 from did import calculate_did
@@ -17,7 +17,7 @@ import store
 
 def _get_version():
     try:
-        return version("agent_causal_decision_tool")
+        return _pkg_version("agent_causal_decision_tool")
     except PackageNotFoundError:
         return "unknown"
 
@@ -540,8 +540,7 @@ def _format_maturity_text(maturity: dict) -> str:
 
 
 @main.command("version")
-def version():
-    """"Show version info"""
+def show_version():
     click.echo(f"agent-causal-decision-tool {_VERSION}")
 
 
