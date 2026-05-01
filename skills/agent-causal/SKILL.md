@@ -1,20 +1,16 @@
 ---
 name: agent-causal
-description: Agent Causal Decision Tool helps you and your AI agents answer one question from experiment data: should we ship this change, keep running the test, or roll it back? Returns structured JSON decisions, key statistics, and audit trails from A/B tests and Difference-in-Differences analysis.
+description: "Agent Causal Decision Tool helps you and your AI agents answer one question from experiment data: should we ship this change, keep running the test, or roll it back? Returns structured JSON decisions, key statistics, and audit trails from A/B tests and Difference-in-Differences analysis."
 metadata:
-  {
-    "openclaw": {
-      "category": "data-science",
-      "version": "0.5.3",
-      "license": "Apache-2.0",
-      "tools": ["exec"],
-      "requires": {
-        "bins": ["python3", "git", "pip"],
-        "python packages": ["click", "scipy", "numpy", "pydantic"]
-      },
-      "source": "https://github.com/ZhuMorris/agent-causal-decision-tool"
-    }
-  }
+  openclaw:
+    category: data-science
+    version: "0.7.4"
+    license: Apache-2.0
+    tools: [exec]
+    requires:
+      bins: [python3, git, pip]
+      python_packages: [click, scipy, numpy, pydantic]
+    source: https://github.com/ZhuMorris/agent-causal-decision-tool
 ---
 
 # Agent Causal Decision Tool
