@@ -149,3 +149,4 @@ class DIDOutput(BaseModel):
     did_diagnostics: Optional[DIDDiagnostics] = Field(default=None, description="DiD setup quality diagnostics")
     recommended_next_action: Optional[str] = Field(default=None, description="Suggested next action based on diagnostics")
     explanation: Optional[str] = Field(default=None, description="Plain-language explanation of result and caution level")
+    next_analysis_suggestion: Optional[dict] = Field(default=None, description="Suggested next analysis to run when result is inconclusive or caution is high")

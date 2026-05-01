@@ -30,7 +30,6 @@ def main():
     pass
 
 
-@main.command("bayes")
 @click.option("--control", required=True, help="Control group: conversions/total (e.g., 100/5000)")
 @click.option("--variant", required=True, help="Variant group: conversions/total (e.g., 120/5000)")
 @click.option("--name", default="variant_1", help="Variant name")
@@ -177,9 +176,15 @@ def cohort_breakdown_cmd(input_file, json_input, output_format, auto_save):
 
 
 def _parse_cohort_csv(path):
-    """Parse CSV segment data into cohort_breakdown input format."""
+    """Parse CSV segment data into cohort_breakdown input format.
+
+    CSV format expected: segment_name, arm, conversions, total [, segment_definition_note]
+    Each segment must have exactly two arms: one control and one variant.
+    Raises ValueError if a segment is missing either arm.
+    """
     import csv
     segments = {}
+    seen_arms: dict = {}
     with open(path) as f:
         reader = csv.DictReader(f)
         for row in reader:
@@ -193,7 +198,12 @@ def _parse_cohort_csv(path):
                     "variant_conversions": 0,
                     "variant_total": 0,
                 }
+                seen_arms[name] = set()
+
             arm = row["arm"].lower()
+            if arm not in ("control", "variant"):
+                raise ValueError(f"Row for segment '{name}' has unknown arm '{arm}'; expected 'control' or 'variant'")
+
             conv = int(row["conversions"])
             total = int(row["total"])
             if arm == "control":
@@ -202,6 +212,14 @@ def _parse_cohort_csv(path):
             elif arm == "variant":
                 segments[name]["variant_conversions"] += conv
                 segments[name]["variant_total"] += total
+
+            seen_arms[name].add(arm)
+
+    # Enforce exactly two arms per segment
+    for name, arms in seen_arms.items():
+        if "control" not in arms or "variant" not in arms:
+            missing = list({"control", "variant"} - arms)
+            raise ValueError(f"Segment '{name}' is missing arm(s): {missing}. Each segment requires both 'control' and 'variant'.")
 
     return {"segments": list(segments.values())}
 
@@ -755,6 +773,17 @@ def _print_compare_text(comparison):
     if attention.get("suggestion"):
         click.echo()
         click.echo(f"Attention needed: {attention['suggestion']}")
+
+
+# ── PRD command aliases ───────────────────────────────────────────────────────
+# These names match the PRD vocabulary; they dispatch to the canonical commands
+# which are defined above. Register them after the command functions exist.
+
+main.add_command(plan, "ab-plan")
+main.add_command(ab_test, "ab-compare")
+main.add_command(did_analysis, "did-estimate")
+main.add_command(audit, "audit-decision")
+main.add_command(cohort_breakdown_cmd, "cohort-analyze")
 
 
 if __name__ == "__main__":

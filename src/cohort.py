@@ -46,6 +46,12 @@ def cohort_breakdown(input_data: dict) -> dict:
     if not segments_in:
         raise ValueError("At least one segment is required")
 
+    # Validate required fields
+    if not experiment_id or experiment_id == "unknown":
+        raise ValueError("experiment_id is required for audit traceability")
+    if not metric:
+        raise ValueError("metric is required to label what is being measured")
+
     # ── Per-segment stats ────────────────────────────────────────────────────
     segments_out = []
     p_values_raw = []

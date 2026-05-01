@@ -246,6 +246,10 @@ def calculate_did(input_data: dict) -> DIDOutput:
         did_diagnostics=diagnostics,
         recommended_next_action=recommended_next_action,
         explanation=explanation,
+        next_analysis_suggestion={
+            "command": "cohort-breakdown",
+            "reason": "DiD result is inconclusive or caution is high; cohort analysis may reveal segment-level effects"
+        } if decision in ("keep_running", "escalate") or diagnostics.recommended_caution_level == "high" else None,
     )
 
 
