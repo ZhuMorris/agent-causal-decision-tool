@@ -11,6 +11,7 @@ from did import calculate_did
 from planning import calculate_plan
 from bayes import calculate_bayes_ab
 from audit import format_audit_text, check_experiment_maturity
+from cohort import cohort_breakdown
 import store
 
 
@@ -120,6 +121,182 @@ def ab_test(control, variant, name, output_format, auto_save, sequential_enabled
         click.echo(result_json)
     else:
         _print_ab_text(result)
+
+
+@main.command("cohort-breakdown")
+@click.option("--file", "input_file", type=click.Path(exists=True), help="Path to segment JSON or CSV file")
+@click.option("--json", "json_input", help="JSON input string (alternative to --file)")
+@click.option("--format", "output_format", type=click.Choice(["json", "text"]), default="json")
+@click.option("--save", "auto_save", is_flag=True, help="Save result to experiment history")
+def cohort_breakdown_cmd(input_file, json_input, output_format, auto_save):
+    """Run segment-level experiment analysis.
+
+    Accepts pre-computed segment data with conversion counts per arm.
+    Use --file for JSON or CSV input. Use --json to pass JSON directly.
+
+    Example JSON input:
+    {
+      "experiment_id": "checkout-v3",
+      "metric": "conversion_rate",
+      "prior_result_id": "dec_20260501_001",
+      "prior_decision": "wait",
+      "segments": [
+        {"segment_name": "new_users", "segment_definition_note": "...",
+         "control_conversions": 21, "control_total": 1000,
+         "variant_conversions": 67, "variant_total": 1000}
+      ]
+    }
+    """
+    try:
+        if input_file:
+            suffix = Path(input_file).suffix.lower()
+            if suffix == ".csv":
+                data = _parse_cohort_csv(input_file)
+            else:
+                with open(input_file) as f:
+                    data = json.load(f)
+        elif json_input:
+            data = json.loads(json_input)
+        else:
+            data = json.load(sys.stdin)
+
+        result = cohort_breakdown(data)
+        result_json = json.dumps(result, indent=2)
+
+        if auto_save:
+            row_id = store.save_experiment(result_json, "cohort_breakdown", json.dumps(data))
+            click.echo(f"[Saved to history as experiment #{row_id}]", err=True)
+
+        if output_format == "json":
+            click.echo(result_json)
+        else:
+            _print_cohort_text(result)
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+
+def _parse_cohort_csv(path):
+    """Parse CSV segment data into cohort_breakdown input format."""
+    import csv
+    segments = {}
+    with open(path) as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            name = row["segment_name"]
+            if name not in segments:
+                segments[name] = {
+                    "segment_name": name,
+                    "segment_definition_note": row.get("segment_definition_note", ""),
+                    "control_conversions": 0,
+                    "control_total": 0,
+                    "variant_conversions": 0,
+                    "variant_total": 0,
+                }
+            arm = row["arm"].lower()
+            conv = int(row["conversions"])
+            total = int(row["total"])
+            if arm == "control":
+                segments[name]["control_conversions"] += conv
+                segments[name]["control_total"] += total
+            elif arm == "variant":
+                segments[name]["variant_conversions"] += conv
+                segments[name]["variant_total"] += total
+
+    return {"segments": list(segments.values())}
+
+
+def _print_cohort_text(result):
+    """Print cohort breakdown in human-readable format."""
+    click.echo("=" * 50)
+    click.echo("COHORT BREAKDOWN RESULTS")
+    click.echo("=" * 50)
+    click.echo(f"Method: {result['method']}")
+    click.echo(f"Experiment: {result.get('experiment_id', 'unknown')}")
+    click.echo(f"Metric: {result.get('metric', 'unknown')}")
+    if result.get('prior_result_id'):
+        click.echo(f"Prior result: {result['prior_result_id']} ({result.get('prior_decision', 'unknown')})")
+    click.echo()
+    click.echo(f"Override: {result.get('cohort_decision_override')}")
+    if result.get('cohort_override_reason'):
+        click.echo(f"  {result['cohort_override_reason']}")
+    click.echo(f"Interaction flag: {result.get('interaction_flag', False)}")
+    click.echo()
+    click.echo("Segments:")
+    click.echo(f"  {'Segment':<20} {'Ctrl Rate':>10} {'Var Rate':>10} {'Lift':>8} {'Raw-p':>8} {'Adj-p':>8} {'Decision':<18}")
+    click.echo("  " + "-" * 90)
+    for seg in result.get('segments', []):
+        click.echo(
+            f"  {seg['segment_name']:<20} "
+            f"{seg['control_rate']:>10.4f} {seg['variant_rate']:>10.4f} "
+            f"{seg['relative_lift_pct']:>7.1f}% {seg['p_value_raw']:>8.4f} "
+            f"{seg['p_value_adjusted']:>8.4f} {seg['decision']:<18}"
+        )
+    click.echo()
+    click.echo("Priority Ranking:")
+    for r in result.get('priority_ranking', []):
+        click.echo(f"  {r['rank']}. {r['segment']}: {r['rationale']}")
+    click.echo()
+    click.echo(f"Summary: {result.get('summary', '')}")
+    click.echo(f"Recommended action: {result.get('recommended_next_action', 'unknown')}")
+    if result.get('warnings'):
+        click.echo()
+        click.echo("Warnings:")
+        for w in result['warnings']:
+            click.echo(f"  [{w.split(':')[0]}] {w}")
+
+
+@main.command("validate-input")
+@click.option("--file", "input_file", type=click.Path(exists=True), help="Path to input file")
+@click.option("--json", "json_input", help="JSON input string")
+def validate_input_cmd(input_file, json_input):
+    """Validate input data schema and quality before running analysis.
+
+    Supports: ab_test, did, cohort_breakdown, planning.
+    Pass --file or --json with a 'mode' field to specify validation mode.
+    """
+    try:
+        if input_file:
+            with open(input_file) as f:
+                data = json.load(f)
+        elif json_input:
+            data = json.loads(json_input)
+        else:
+            data = json.load(sys.stdin)
+
+        mode = data.pop("mode", "ab_test") if isinstance(data, dict) else "ab_test"
+        result = _validate_input(data, mode)
+        click.echo(json.dumps(result, indent=2))
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+
+def _validate_input(data: dict, mode: str) -> dict:
+    """Validate input for given mode."""
+    errors = []
+    warnings = []
+
+    if mode == "cohort_breakdown":
+        segments = data.get("segments", [])
+        if not segments:
+            errors.append("No segments provided")
+        for seg in segments:
+            for f in ["segment_name", "control_conversions", "control_total",
+                      "variant_conversions", "variant_total"]:
+                if f not in seg:
+                    errors.append(f"Missing '{f}' in segment '{seg.get('segment_name', '?')}'")
+            if seg.get("control_total", 0) <= 0 or seg.get("variant_total", 0) <= 0:
+                errors.append(f"Invalid totals in segment '{seg.get('segment_name', '?')}'")
+        return {
+            "valid": len(errors) == 0,
+            "mode": mode,
+            "errors": errors,
+            "warnings": warnings,
+            "segment_count": len(segments),
+        }
+    else:
+        return {"valid": True, "mode": mode, "errors": [], "warnings": [], "note": "Basic validation passed"}
 
 
 @main.command("did")

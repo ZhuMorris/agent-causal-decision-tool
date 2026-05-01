@@ -156,6 +156,15 @@ def calculate_ab(input_data: dict) -> ABTestOutput:
         }
         next_steps = next_steps_map[decision]
 
+    # next_analysis_suggestion — fires when aggregate result is inconclusive
+    next_analysis_suggestion = None
+    if decision in ("keep_running", "escalate"):
+        next_analysis_suggestion = {
+            "command": "cohort-breakdown",
+            "reason": "Aggregate result is inconclusive. A segment-level breakdown may reveal hidden signal.",
+            "trigger": f"decision={decision}",
+        }
+
     recommendation = Recommendation(
         decision=decision,
         confidence=confidence,
@@ -288,6 +297,7 @@ def calculate_ab(input_data: dict) -> ABTestOutput:
         traffic_stats=traffic_stats,
         warnings=warnings,
         next_steps=next_steps,
+        next_analysis_suggestion=next_analysis_suggestion,
         audit=audit,
         inputs=input_data,
         sequential_reviewed=ab_input.sequential_enabled,

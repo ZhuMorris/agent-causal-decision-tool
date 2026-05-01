@@ -88,6 +88,7 @@ class ABTestOutput(BaseModel):
     traffic_stats: TrafficStats
     warnings: list[WarningDetail] = Field(default_factory=list)
     next_steps: list[str] = Field(..., description="Suggested next steps")
+    next_analysis_suggestion: Optional[dict] = Field(default=None, description="Suggested next analysis command if result is inconclusive")
     audit: dict = Field(..., description="Audit record")
     inputs: dict = Field(..., description="Original inputs for audit")
     # Sequential early stopping fields
