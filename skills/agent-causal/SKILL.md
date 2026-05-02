@@ -1,6 +1,6 @@
 ---
 name: agent-causal
-description: "Agent Causal Decision Tool helps you and your AI agents answer one question from experiment data: should we ship this change, keep running the test, or roll it back? Returns structured JSON decisions, key statistics, and audit trails from A/B tests, DiD, and cohort/segment analysis."
+description: "Agent Causal Decision Tool helps you and your AI agents answer one question from experiment data: should we ship this change, keep running the test, or roll it back? Returns structured JSON decisions, key statistics, and audit trails from A/B tests (frequentist + Bayesian), DiD, cohort/segment analysis, and sequential early stopping."
 metadata:
   openclaw:
     category: data-science
@@ -15,7 +15,7 @@ metadata:
 
 # Agent Causal Decision Tool
 
-A causal decision and audit tool for AI agents. Evaluate product changes using A/B testing and Difference-in-Differences methods.
+A causal decision and audit tool for AI agents. Evaluate product changes using A/B testing, Difference-in-Differences, and sequential early stopping.
 
 **Source:** https://github.com/ZhuMorris/agent-causal-decision-tool
 
@@ -109,7 +109,15 @@ PYTHONPATH=. python3 -m src.cli ab --control 100/5000 --variant 130/5000
 - `--name`: Variant name (optional, default: `variant_1`)
 - `--format`: Output format `json` (default) or `text`
 
-**Example:**
+**Sequential / Early Stopping (optional):**
+- `--sequential/--no-sequential`: Enable sequential early stopping evaluation
+- `--experiment-start`, `--experiment-end`: ISO 8601 timestamps for runtime calculation
+- `--min-runtime-days` (default 7): Minimum days before early stop is considered
+- `--min-sample-per-arm` (default 2000): Minimum sample per arm before early stop
+- `--early-stop-p` (default 0.01): p-value threshold for early stop
+- `--max-runtime-days`: Hard cap; escalates if exceeded without strong result
+
+**Trigger logic:** Both min-runtime AND min-sample-per-arm must be met, AND p-value below `--early-stop-p`. Max runtime exceeded always escalates.
 ```bash
 PYTHONPATH=. python3 -m src.cli ab --control 100/5000 --variant 130/5000
 ```
@@ -466,5 +474,5 @@ if result.recommendation.decision == "ship":
 - Python 3.9+
 - click >= 8.1.0
 - scipy >= 1.11.0
-- numpy >= 1.24.0
-- pydantic >= 2.0.0
+- numpy >= 1.26.0
+- pydantic >= 2.10.0
