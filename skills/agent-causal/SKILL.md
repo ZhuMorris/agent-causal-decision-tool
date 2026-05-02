@@ -24,18 +24,11 @@ A causal decision and audit tool for AI agents. Evaluate product changes using A
 Before using this skill, install the tool:
 
 ```bash
-# Clone the repository (if not already present)
-git clone https://github.com/ZhuMorris/agent-causal-decision-tool.git ~/clawd/agent-causal-decision-tool 2>/dev/null || true
+# Option 1 (recommended): clone once, install locally — no remote fetch at runtime
+git clone https://github.com/ZhuMorris/agent-causal-decision-tool.git ~/clawd/agent-causal-decision-tool
+cd ~/clawd/agent-causal-decision-tool && pip install . -q
 
-# Install dependencies
-pip install click scipy numpy pydantic -q
-
-# Navigate to the tool directory
-cd ~/clawd/agent-causal-decision-tool
-```
-
-Alternatively, install as a Python package:
-```bash
+# Option 2: install directly from Git (one-liner)
 pip install git+https://github.com/ZhuMorris/agent-causal-decision-tool.git -q
 ```
 
