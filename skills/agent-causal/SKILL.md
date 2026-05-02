@@ -1,6 +1,6 @@
 ---
 name: agent-causal
-description: "Agent Causal Decision Tool helps you and your AI agents answer one question from experiment data: should we ship this change, keep running the test, or roll it back? Returns structured JSON decisions, key statistics, and audit trails from A/B tests and Difference-in-Differences analysis."
+description: "Agent Causal Decision Tool helps you and your AI agents answer one question from experiment data: should we ship this change, keep running the test, or roll it back? Returns structured JSON decisions, key statistics, and audit trails from A/B tests, DiD, and cohort/segment analysis."
 metadata:
   openclaw:
     category: data-science
@@ -38,6 +38,17 @@ Alternatively, install as a Python package:
 ```bash
 pip install git+https://github.com/ZhuMorris/agent-causal-decision-tool.git -q
 ```
+
+## When to Use It
+
+Use this skill whenever you or your agents have experiment or rollout results and need a decision you can defend:
+
+- You ran an A/B test and want to know whether to ship, keep running, or reject the variant.
+- You ran an A/B test and it was inconclusive — you want to know if a specific user segment is driving (or diluting) the effect.
+- You did a staged / regional rollout and want a DiD estimate of impact vs a similar control group.
+- You prefer a Bayesian summary ("95% chance B is better; expected lift 3–5%") to drive thresholds in automated workflows.
+- You need an audit trail with period, traffic, assumptions, thresholds, and warnings for product/data/risk review.
+- You want to plan an experiment (sample size, MDE, duration) or compare current results to previous experiments.
 
 ## Commands
 
@@ -211,6 +222,101 @@ PYTHONPATH=. python3 -m src.cli did --pre-control 1000 --post-control 1100 --pre
 - `--pre-treated`: Treated group metric before treatment
 - `--post-treated`: Treated group metric after treatment
 
+### Cohort / Segment Breakdown
+
+When an aggregate A/B or DiD result is inconclusive, break down results by user segment to find hidden signals:
+
+```bash
+cd ~/clawd/agent-causal-decision-tool
+PYTHONPATH=. python3 -m src.cli cohort-breakdown --file segments.json
+```
+
+**Input format (JSON):**
+```json
+{
+  "experiment_id": "checkout-v3",
+  "metric": "conversion_rate",
+  "prior_result_id": "dec_20260501_001",
+  "prior_decision": "wait",
+  "segments": [
+    {
+      "segment_name": "new_users",
+      "segment_definition_note": "Users registered within last 30 days",
+      "control_conversions": 21,
+      "control_total": 1000,
+      "variant_conversions": 67,
+      "variant_total": 1000
+    },
+    {
+      "segment_name": "returning_users",
+      "segment_definition_note": "Users registered more than 30 days ago",
+      "control_conversions": 220,
+      "control_total": 4000,
+      "variant_conversions": 228,
+      "variant_total": 4000
+    }
+  ]
+}
+```
+
+**Input format (CSV alternative):**
+```
+segment_name,segment_definition_note,arm,conversions,total
+new_users,Users registered within last 30 days,control,21,1000
+new_users,Users registered within last 30 days,variant,67,1000
+returning_users,Users registered more than 30 days ago,control,220,4000
+returning_users,Users registered more than 30 days ago,variant,228,4000
+```
+
+**Parameters:**
+- `--file`: Path to JSON or CSV segment file
+- `--json`: JSON input string (alternative to `--file`)
+- `--format`: Output format `json` (default) or `text`
+- `--save`: Save result to experiment history
+
+**Multiple comparison correction:**
+- 4+ segments: Benjamini-Hochberg FDR correction applied automatically
+- 5+ segments: Also offers Bonferroni as alternative via `--method bonferroni`
+
+**Example output:**
+```json
+{
+  "method": "experiment_cohort_breakdown",
+  "cohort_decision_override": true,
+  "cohort_override_reason": "Strong positive signal in 'new_users' (lift=219.0%, adj-p=0.0000) contradicts aggregate decision 'wait'",
+  "interaction_flag": false,
+  "segments": [
+    {
+      "segment_name": "new_users",
+      "control_rate": 0.021,
+      "variant_rate": 0.067,
+      "relative_lift_pct": 219.05,
+      "p_value_raw": 0.0000,
+      "p_value_adjusted": 0.0000,
+      "decision": "strongly_positive",
+      "priority_rank": 1
+    }
+  ],
+  "priority_ranking": [
+    {"rank": 1, "segment": "new_users", "rationale": "Strong positive effect (lift=219.1%, adj-p=0.0000). Highest priority."}
+  ],
+  "summary": "new_users drives the effect. 1 segment(s) positive.",
+  "recommended_next_action": "targeted_rollout"
+}
+```
+
+**When to use cohort breakdown:**
+- Aggregate A/B result is `keep_running` or `escalate` — segment analysis may reveal a hidden signal
+- One segment is strongly positive while another is strongly negative (interaction flag)
+- You want to ship only to specific segments rather than all users
+
+**Key features:**
+- Per-segment two-proportion z-test with 95% confidence
+- Benjamini-Hochberg FDR correction for 4+ segments (controls false-discovery rate)
+- Priority ranking by absolute lift magnitude
+- Cohort decision override: fires when a segment contradicts the aggregate decision
+- Interaction flag: triggered when segments show opposing strongly-significant directions
+
 ### Decision Audit
 
 Reconstruct and explain a previous decision:
@@ -318,6 +424,10 @@ Attention needed: 2 experiments recommend ship. Review if they test the same met
 | `keep_running` | Continue experiment | p < 0.3, trending positive |
 | `reject` | Do not deploy | p < 0.05 AND negative lift |
 | `escalate` | Needs human review | Not conclusive or critical warnings |
+| `targeted_rollout` | Ship to specific segment only | Strong signal in one segment, aggregate inconclusive |
+| `full_rollout` | Ship to all users | All segments positive |
+| `abandon_segment` | Do not ship to specific segment | Strong negative in one segment despite aggregate ship |
+| `confirm_rejection` | Confirm abandonment | All segments negative |
 
 ## Python API
 

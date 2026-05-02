@@ -6,7 +6,6 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional
 
-
 DB_PATH = Path.home() / ".agent-causal" / "history.db"
 
 
@@ -126,11 +125,14 @@ def compare_experiments(experiment_ids: list) -> dict:
     interpolated into the SQL text itself. We additionally enforce int IDs
     and reject empty lists as defense-in-depth.
     """
-    if not experiment_ids:
-        return {"error": "Need at least 1 experiment ID to compare"}
+    # Enforce int IDs and reject floats (e.g. 1.9 would silently truncate)
+    try:
+        int_ids = [int(x) for x in experiment_ids]
+    except (TypeError, ValueError):
+        return {"error": "experiment_ids must be integers"}
 
-    # Enforce int IDs — no string injection possible
-    int_ids = [int(x) for x in experiment_ids]
+    if not int_ids:
+        return {"error": "Need at least 1 experiment ID to compare"}
 
     conn = _get_db()
     placeholders = ",".join(["?"] * len(int_ids))
