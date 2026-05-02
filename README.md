@@ -19,6 +19,7 @@ This tool wraps a few standard methods into one consistent, agent‑friendly int
 - **Frequentist A/B testing** for classic "control vs variant" questions.
 - **Bayesian A/B testing** when you want answers like "there is a 93% chance B is better than A" instead of only p‑values.
 - **Difference‑in‑differences (DiD)** for quasi‑experiments like staged rollouts or region‑based launches where you cannot randomize perfectly.
+- **Cohort / segment breakdown** when an aggregate result is inconclusive — you can slice by user segment to find hidden signals, with Benjamini-Hochberg correction for 4+ segments.
 - **Planning and power checks** so you can see if a test is realistic before you start it.
 - **Decision audit** so humans can see what the agent did, why it did it, and how strong the evidence really was..
 
@@ -29,6 +30,7 @@ The goal is not to replace your analytics stack, but to give agents a small, rel
 Use this tool whenever you or your agents have experiment or rollout results and need a decision you can defend:
 
 - You ran an A/B test and want to know whether to ship, keep running, or reject the variant.
+- You ran an A/B test and it was inconclusive — you want to know if a specific user segment is driving (or diluting) the effect.
 - You rolled out a feature to one region or cohort first and want a DiD estimate of impact compared to a similar control group.
 - You prefer a Bayesian summary ("95% chance B is better; expected lift 3–5%") to drive thresholds in automated workflows.
 - You need an audit trail with experiment period, traffic size, assumptions, thresholds, and warnings so product, data, or risk teams can review agent decisions later.
