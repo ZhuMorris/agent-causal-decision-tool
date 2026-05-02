@@ -49,6 +49,7 @@ Use this skill whenever you or your agents have experiment or rollout results an
 - You prefer a Bayesian summary ("95% chance B is better; expected lift 3–5%") to drive thresholds in automated workflows.
 - You need an audit trail with period, traffic, assumptions, thresholds, and warnings for product/data/risk review.
 - You want to plan an experiment (sample size, MDE, duration) or compare current results to previous experiments.
+- You want to **stop an A/B test early** when evidence is overwhelmingly strong (sequential early stopping), without losing audit integrity.
 
 ## Commands
 
