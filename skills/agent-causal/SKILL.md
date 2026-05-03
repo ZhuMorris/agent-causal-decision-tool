@@ -4,7 +4,7 @@ description: "Agent Causal Decision Tool helps you and your AI agents answer one
 metadata:
   openclaw:
     category: data-science
-    version: "0.8.0"
+    version: "0.8.2"
     license: Apache-2.0
     tools: [exec]
     requires:
@@ -19,18 +19,35 @@ A causal decision and audit tool for AI agents. Evaluate product changes using A
 
 **Source:** https://github.com/ZhuMorris/agent-causal-decision-tool
 
+## Security Model
+
+This skill runs as a local CLI tool only — no code is fetched from remote at runtime.
+
+**Setup (one-time, before first use):**
+```bash
+# Clone once to local disk — no runtime network access needed
+git clone https://github.com/ZhuMorris/agent-causal-decision-tool.git ~/clawd/agent-causal-decision-tool
+pip install ~/clawd/agent-causal-decision-tool -q
+```
+
+After installation, the `agent-causal` command is available locally. The skill itself only reads your experiment data and runs local statistical calculations — it does not fetch code, pull external dependencies at runtime, or make outbound network requests during analysis.
+
+**Tools used:** `exec` (for running the `agent-causal` CLI commands you specify). No subprocess spawning with unsanitized input.
+
+---
+
 ## Setup
 
-Before using this skill, install the tool:
+Before using this skill, install the tool (one-time):
 
 ```bash
-# Option 1 (recommended): clone once, install locally — no remote fetch at runtime
 git clone https://github.com/ZhuMorris/agent-causal-decision-tool.git ~/clawd/agent-causal-decision-tool
-cd ~/clawd/agent-causal-decision-tool && pip install . -q
-
-# Option 2: install directly from Git (one-liner)
-pip install git+https://github.com/ZhuMorris/agent-causal-decision-tool.git -q
+pip install ~/clawd/agent-causal-decision-tool -q
 ```
+
+After this, `agent-causal` is available as a local command. No further network access is required.
+
+---
 
 ## When to Use It
 
