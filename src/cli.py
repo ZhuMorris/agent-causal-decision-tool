@@ -152,6 +152,11 @@ def cohort_breakdown_cmd(input_file, json_input, output_format, auto_save):
             suffix = Path(input_file).suffix.lower()
             if suffix == ".csv":
                 data = _parse_cohort_csv(input_file)
+                # experiment_id and metric may come from --json if provided alongside --file
+                if json_input:
+                    extra = json.loads(json_input)
+                    data["experiment_id"] = extra.get("experiment_id", "unknown")
+                    data["metric"] = extra.get("metric", "conversion_rate")
             else:
                 with open(input_file) as f:
                     data = json.load(f)

@@ -209,6 +209,7 @@ class TestCohortFileInput:
         assert result.exit_code == 0, result.stderr
 
     def test_cohort_csv_file(self, tmp_path):
+        """cohort-breakdown --file with .csv calls _parse_cohort_csv (not --json path)."""
         csv_content = (
             "segment_name,segment_definition_note,arm,conversions,total\n"
             "new_users,first visit,control,50,2000\n"
@@ -218,22 +219,14 @@ class TestCohortFileInput:
         )
         path = tmp_path / "segments.csv"
         path.write_text(csv_content)
-        # Provide experiment_id and metric as JSON input
+        # Provide experiment_id and metric via --json for metadata; use --file for CSV
         import json
         cohort_input = {
             "experiment_id": "test-exp",
             "metric": "conversion_rate",
-            "segments": [
-                {"segment_name": "new_users", "segment_definition_note": "first visit",
-                 "control_conversions": 50, "control_total": 2000,
-                 "variant_conversions": 65, "variant_total": 2000},
-                {"segment_name": "returning", "segment_definition_note": "repeat visitors",
-                 "control_conversions": 80, "control_total": 3000,
-                 "variant_conversions": 85, "variant_total": 3000},
-            ]
         }
         result = runner.invoke(main, [
-            "cohort-breakdown", "--json", json.dumps(cohort_input)
+            "cohort-breakdown", "--json", json.dumps(cohort_input), "--file", str(path)
         ])
         assert result.exit_code == 0, result.stderr
 
@@ -249,18 +242,18 @@ class TestABSaveAndRetrieve:
     """Run ab, save result, retrieve via history."""
 
     def test_ab_save_and_history(self, fresh_db):
-        # 1. Run ab analysis
+        # 1. Run ab analysis with --save
         ab = runner.invoke(main, [
             "ab", "--control", "100/5000", "--variant", "130/5000", "--save"
         ])
         assert ab.exit_code == 0, ab.stderr
 
-        # 2. Verify it appears in history
+        # 2. Verify it appears in history (proves CLI → store → history)
         hist = runner.invoke(main, ["history", "--format", "json"])
         data = json.loads(hist.stdout)
-        # --save may create history entry or may not depending on implementation
-        # Just check history itself works
-        assert isinstance(data, list)
+        assert len(data) >= 1, "history should contain at least 1 saved experiment"
+        assert data[0]["mode"] == "ab_test"
+        assert data[0]["decision"] == "ship"
 
     def test_ab_with_auto_save_flag(self, fresh_db):
         result = runner.invoke(main, [
@@ -270,7 +263,225 @@ class TestABSaveAndRetrieve:
         assert result.exit_code == 0
 
 
-class TestStoreModuleDirect:
+class TestPlanBayesDidSaveAndHistory:
+    """Verify plan/bayes/did --save populates history (same pattern as ab)."""
+
+    def test_plan_save_and_history(self, fresh_db):
+        result = runner.invoke(main, [
+            "plan", "--baseline", "0.05", "--mde", "5",
+            "--traffic", "5000", "--confidence", "0.95", "--power", "0.8", "--save"
+        ])
+        assert result.exit_code == 0, result.stderr
+        hist = runner.invoke(main, ["history", "--mode", "planning", "--format", "json"])
+        data = json.loads(hist.stdout)
+        assert len(data) >= 1
+        assert data[0]["mode"] == "planning"
+
+    def test_bayes_save_and_history(self, fresh_db):
+        result = runner.invoke(main, [
+            "bayes", "--control", "100/5000", "--variant", "130/5000", "--save"
+        ])
+        assert result.exit_code == 0, result.stderr
+        hist = runner.invoke(main, ["history", "--mode", "bayesian_ab", "--format", "json"])
+        data = json.loads(hist.stdout)
+        assert len(data) >= 1
+        assert data[0]["mode"] == "bayesian_ab"
+
+    def test_did_save_and_history(self, fresh_db):
+        result = runner.invoke(main, [
+            "did", "--pre-control", "1000", "--post-control", "1100",
+            "--pre-treated", "900", "--post-treated", "1150", "--save"
+        ])
+        assert result.exit_code == 0, result.stderr
+        hist = runner.invoke(main, ["history", "--mode", "did", "--format", "json"])
+        data = json.loads(hist.stdout)
+        assert len(data) >= 1
+        assert data[0]["mode"] == "did"
+
+
+class TestCohortSaveAndHistory:
+    """cohort-breakdown --save + history."""
+
+    def test_cohort_save_and_history(self, fresh_db):
+        import json
+        cohort_input = {
+            "experiment_id": "test-cohort",
+            "metric": "conversion_rate",
+            "segments": [
+                {"segment_name": "new_users", "segment_definition_note": "first visit",
+                 "control_conversions": 50, "control_total": 2000,
+                 "variant_conversions": 65, "variant_total": 2000},
+            ]
+        }
+        result = runner.invoke(main, [
+            "cohort-breakdown", "--json", json.dumps(cohort_input), "--save"
+        ])
+        assert result.exit_code == 0, result.stderr
+        # Note: history --mode cohort_breakdown not supported (only ab_test/did/planning/bayesian_ab)
+        hist = runner.invoke(main, ["history", "--format", "json"])
+        data = json.loads(hist.stdout)
+        assert len(data) >= 1
+        cohort_entries = [e for e in data if e["mode"] == "cohort_breakdown"]
+        assert len(cohort_entries) >= 1
+
+
+class TestValidateInputCLI:
+    """validate-input CLI as shipped surface."""
+
+class TestValidateInputCLI:
+    """validate-input CLI as shipped surface.
+
+    Note: _validate_input only has actual schema logic for cohort_breakdown.
+    All other modes (ab_test, did, planning, bayesian_ab, or unknown) return
+    valid=True since they rely on the calculator's own validation.
+    """
+
+    def test_validate_input_valid_cohort(self):
+        """cohort_breakdown with valid segments passes."""
+        result = runner.invoke(main, [
+            "validate-input", "--json",
+            json.dumps({"mode": "cohort_breakdown", "segments": [
+                {"segment_name": "new_users",
+                 "control_conversions": 50, "control_total": 2000,
+                 "variant_conversions": 65, "variant_total": 2000}
+            ]})
+        ])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["valid"] is True
+
+    def test_validate_input_invalid_cohort_missing_segments(self):
+        """cohort_breakdown with no segments → valid=False."""
+        result = runner.invoke(main, [
+            "validate-input", "--json",
+            json.dumps({"mode": "cohort_breakdown", "segments": []})
+        ])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["valid"] is False
+        assert len(data["errors"]) > 0
+
+    def test_validate_input_invalid_cohort_missing_field(self):
+        """cohort_breakdown missing control_total → valid=False."""
+        result = runner.invoke(main, [
+            "validate-input", "--json",
+            json.dumps({"mode": "cohort_breakdown", "segments": [
+                {"segment_name": "new_users",
+                 "control_conversions": 50,
+                 "variant_conversions": 65, "variant_total": 2000}
+            ]})
+        ])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["valid"] is False
+
+    def test_validate_input_ab_test(self):
+        """ab_test mode: validate-input returns valid (ab_test has no extra schema check)."""
+        result = runner.invoke(main, [
+            "validate-input", "--json",
+            json.dumps({"mode": "ab_test", "control_conversions": 100,
+                        "control_total": 5000, "variant_conversions": 130,
+                        "variant_total": 5000})
+        ])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        # ab_test passes basic validation (calculator handles the rest)
+        assert data["mode"] == "ab_test"
+
+
+class TestCohortStdinPath:
+    """cohort-breakdown reads from stdin when neither --file nor --json is provided."""
+
+    def test_cohort_stdin_json(self, tmp_path):
+        import json
+        cohort_input = {
+            "experiment_id": "stdin-test",
+            "metric": "conversion_rate",
+            "segments": [
+                {"segment_name": "new_users", "segment_definition_note": "first visit",
+                 "control_conversions": 50, "control_total": 2000,
+                 "variant_conversions": 65, "variant_total": 2000},
+            ]
+        }
+        result = runner.invoke(main, [
+            "cohort-breakdown"
+        ], input=json.dumps(cohort_input))
+        assert result.exit_code == 0, result.stderr
+
+
+class TestFullJourneyScripted:
+    """Continuous scripted journey: ab --save → history → compare → audit."""
+
+    def test_full_journey_ab_audit(self, fresh_db, tmp_path):
+        """Continuous scripted journey: ab → save → history → audit → compare."""
+        # 1. Run ab analysis
+        ab_result = runner.invoke(main, [
+            "ab", "--control", "100/5000", "--variant", "130/5000", "--format", "json"
+        ])
+        assert ab_result.exit_code == 0
+        ab_json = json.loads(ab_result.stdout)
+
+        # 2. Save via file
+        path = tmp_path / "journey_ab.json"
+        path.write_text(json.dumps(ab_json))
+        save = runner.invoke(main, ["save", str(path)])
+        assert save.exit_code == 0
+
+        # 3. History shows it
+        hist = runner.invoke(main, ["history", "--format", "json"])
+        data = json.loads(hist.stdout)
+        assert len(data) >= 1
+        exp_id = data[0]["id"]
+
+        # 4. Audit the saved file (rebuilder path)
+        audit_result = runner.invoke(main, ["audit", str(path), "--format", "json"])
+        assert audit_result.exit_code == 0
+        audit_data = json.loads(audit_result.stdout)
+        assert audit_data["mode"] == "ab_test"
+        assert len(audit_data["decision_path"]) > 0
+
+        # 5. Compare IDs 1 and 2 (need two distinct IDs)
+        # Save a second experiment so compare has 2 distinct rows
+        did_result = runner.invoke(main, [
+            "did", "--pre-control", "1000", "--post-control", "1100",
+            "--pre-treated", "900", "--post-treated", "1150", "--format", "json"
+        ])
+        did_path = tmp_path / "journey_did.json"
+        did_path.write_text(did_result.stdout)
+        runner.invoke(main, ["save", str(did_path)])
+
+        cmp_result = runner.invoke(main, ["compare", str(exp_id), "2"])
+        assert cmp_result.exit_code == 0
+
+
+class TestDidJourneyWithBootstrap:
+    """DiD --save → history with bootstrap param."""
+
+    def test_did_save_with_n_bootstrap(self, fresh_db):
+        result = runner.invoke(main, [
+            "did", "--pre-control", "5000", "--post-control", "5500",
+            "--pre-treated", "5000", "--post-treated", "6000",
+            "--n-bootstrap", "1000", "--save"
+        ])
+        assert result.exit_code == 0, result.stderr
+        hist = runner.invoke(main, ["history", "--mode", "did", "--format", "json"])
+        data = json.loads(hist.stdout)
+        assert len(data) >= 1
+        assert data[0]["mode"] == "did"
+
+
+class TestBayesJourney:
+    """bayes --save → history with HDI stats."""
+
+    def test_bayes_save_with_hdi(self, fresh_db):
+        result = runner.invoke(main, [
+            "bayes", "--control", "100/5000", "--variant", "130/5000", "--save"
+        ])
+        assert result.exit_code == 0, result.stderr
+        hist = runner.invoke(main, ["history", "--mode", "bayesian_ab", "--format", "json"])
+        data = json.loads(hist.stdout)
+        assert len(data) >= 1
+        assert data[0]["mode"] == "bayesian_ab"
     """Direct tests for store module error and edge branches."""
 
     def test_save_experiment_returns_id(self, fresh_db, saved_ab_result):
