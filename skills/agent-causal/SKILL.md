@@ -4,7 +4,7 @@ description: "Agent Causal Decision Tool helps you and your AI agents answer one
 metadata:
   openclaw:
     category: data-science
-    version: "0.7.6"
+    version: "0.8.0"
     license: Apache-2.0
     tools: [exec]
     requires:
@@ -119,7 +119,7 @@ PYTHONPATH=. python3 -m src.cli ab --control 100/5000 --variant 130/5000
 **Example Output:**
 ```json
 {
-  "version": "1.0",
+  "schema_version": "0.8.0",
   "mode": "ab_test",
   "recommendation": {
     "decision": "ship",
@@ -134,7 +134,8 @@ PYTHONPATH=. python3 -m src.cli ab --control 100/5000 --variant 130/5000
     "relative_lift_pct": 30.0,
     "z_score": 2.0013,
     "p_value": 0.045361,
-    "confidence_interval_95": [0.000124, 0.011876]
+    "lift_ci_95": [0.000124, 0.011876],
+    "relative_lift_ci_95": [0.619, 59.381]
   },
   "traffic_stats": {
     "control_size": 5000,
@@ -223,6 +224,7 @@ PYTHONPATH=. python3 -m src.cli did --pre-control 1000 --post-control 1100 --pre
 - `--post-control`: Control group metric after treatment
 - `--pre-treated`: Treated group metric before treatment
 - `--post-treated`: Treated group metric after treatment
+- `--n-bootstrap` (default 2000, range 500–10000): Number of bootstrap resamples for DiD CI
 
 ### Cohort / Segment Breakdown
 
@@ -455,8 +457,47 @@ if result.recommendation.decision == "ship":
 
 - **LOW_TRAFFIC**: Sample size below 1000 per group
 - **SMALL_EFFECT**: Lift < 1%, may not be practically significant
-- **AGGREGATE_DATA**: DiD performed on aggregated data (use individual-level data for robust inference)
-- **TRENDS_DIVERGE**: DiD parallel trends assumption may not hold
+- **INCONCLUSIVE**: Result not statistically significant or strong enough to act on
+- **NOT_SIGNIFICANT**: Far from significant; consider stopping the experiment
+- **BORDERLINE_P_VALUE**: p-value between 0.05 and 0.10 — weak evidence, not conclusive
+- **CORRECTION_CONSERVATIVE**: Multiple comparison correction applied; may increase false negatives
+- **SEQUENTIAL_EARLY_STOP**: Experiment stopped early via sequential testing; interpret with caution
+- **SEQUENTIAL_CONDITIONS_NOT_MET**: Early stopping conditions not met; normal decision applied
+- **MAX_RUNTIME_EXCEEDED**: Hard runtime cap exceeded without strong result; escalating
+- **ZERO_BASELINE**: Pre-period values cannot be zero for reliable DiD
+- **PARALLEL_TRENDS_VIOLATED**: Control and treated groups show very different pre-to-post ratios (critical)
+- **PARALLEL_TRENDS_WEAK**: Ratios diverge somewhat; monitor closely
+- **BOTH_GROUPS_GREW**: Both groups grew; cannot separate treatment effect from time trend
+- **AGGREGATE_DATA**: Analysis on aggregated data; use individual-level data for robust inference
+- **AGGREGATE_DATA_DID**: DiD result with high caution; not equivalent to a randomized experiment
+- **SINGLE_PRE_PERIOD**: Only one pre-period observation; parallel trends cannot be assessed
+- **SMALL_SAMPLE**: Sample size small; estimates unreliable
+- **IMBALANCED_GROUPS**: Treatment/control group sizes very different; may bias DiD estimate
+- **LARGE_EFFECT_SMALL_SAMPLE**: Large effect estimate from small sample; prioritize replication
+- **PARALLEL_TRENDS_NO_DATA**: No pre-period count provided; parallel trends cannot be assessed
+- **BOOTSTRAP_CI_UNRELIABLE**: Bootstrap CI not computed — count < 100 or zero baseline
+- **BOOTSTRAP_CI_WIDE**: Bootstrap CI range > 2×|DiD estimate|; point estimate uncertain
+- **DID_CI_CROSSES_ZERO**: Bootstrap CI crosses zero; effect direction uncertain
+- **SLOW_EXPERIMENT**: Estimated duration > 30 days; seasonal effects may confound results
+- **INFEASIBLE_EXPERIMENT**: Duration too long; consider DiD instead
+- **SMALL_MDE**: MDE very small; may require impossibly large sample
+- **BASELINE_VERY_LOW**: Baseline rate < 0.5%; estimations may be unreliable
+- **BASELINE_NEAR_ZERO**: Baseline rate < 0.1%; do not run experiment without careful review
+- **PRIOR_DOMINATES**: Very low total traffic; Jeffreys prior dominates posterior; interpret with caution
+- **CREDIBLE_INTERVAL_WIDE**: Bayesian credible interval is very wide; estimate uncertain
+
+## Schema Contract
+
+The tool exposes a versioned schema contract for agent consumption:
+
+```bash
+cd ~/clawd/agent-causal-decision-tool
+PYTHONPATH=. python3 -m src.cli schema
+```
+
+This prints `schema.json` — a wrapper containing `schema_version`, `schema_coverage` (`ab`, `did`, `plan`), `schema_coverage_pending` (`bayes`, `cohort`), `severity_contract`, and `definitions` (JSON Schema from Pydantic models).
+
+All output models include `schema_version` field injected from package metadata — never hardcoded.
 
 ## Location
 

@@ -360,3 +360,141 @@ class TestABTestEdgeCases:
         })
         # Both zero - should handle gracefully
         assert "p_value" in result.statistics
+
+
+class TestConfidenceIntervalOutput:
+    """Tests for lift_ci_95, relative_lift_ci_95 (v0.8 rename from confidence_interval_95)."""
+
+    def test_lift_ci_95_present(self):
+        """lift_ci_95 field must be present in A/B statistics output."""
+        result = calculate_ab({
+            "control_conversions": 100,
+            "control_total": 5000,
+            "variant_conversions": 130,
+            "variant_total": 5000
+        })
+        assert "lift_ci_95" in result.statistics
+        assert isinstance(result.statistics["lift_ci_95"], list)
+        assert len(result.statistics["lift_ci_95"]) == 2
+
+    def test_lift_ci_95_no_confidence_interval_95(self):
+        """confidence_interval_95 must be removed (clean break)."""
+        result = calculate_ab({
+            "control_conversions": 100,
+            "control_total": 5000,
+            "variant_conversions": 130,
+            "variant_total": 5000
+        })
+        assert "confidence_interval_95" not in result.statistics
+
+    def test_lift_ci_95_order_correct(self):
+        """CI lower < upper."""
+        result = calculate_ab({
+            "control_conversions": 100,
+            "control_total": 5000,
+            "variant_conversions": 130,
+            "variant_total": 5000
+        })
+        ci = result.statistics["lift_ci_95"]
+        assert ci[0] < ci[1]
+
+    def test_relative_lift_ci_95_present(self):
+        """relative_lift_ci_95 must be present (percentage CI relative to control rate)."""
+        result = calculate_ab({
+            "control_conversions": 100,
+            "control_total": 5000,
+            "variant_conversions": 130,
+            "variant_total": 5000
+        })
+        assert "relative_lift_ci_95" in result.statistics
+        assert isinstance(result.statistics["relative_lift_ci_95"], list)
+        assert len(result.statistics["relative_lift_ci_95"]) == 2
+
+    def test_relative_lift_ci_95_percentage_scale(self):
+        """Relative CI values should be in percentage terms (not decimal)."""
+        result = calculate_ab({
+            "control_conversions": 100,
+            "control_total": 5000,
+            "variant_conversions": 130,
+            "variant_total": 5000
+        })
+        rel_ci = result.statistics["relative_lift_ci_95"]
+        assert rel_ci[0] < 100  # should be percentage, not >1
+
+    def test_schema_version_present(self):
+        """schema_version must be present in A/B output."""
+        result = calculate_ab({
+            "control_conversions": 100,
+            "control_total": 5000,
+            "variant_conversions": 130,
+            "variant_total": 5000
+        })
+        assert hasattr(result, "schema_version")
+        assert result.schema_version is not None
+
+
+class TestBorderlinePValue:
+    """Tests for BORDERLINE_P_VALUE warning (0.05 ≤ p ≤ 0.10)."""
+
+    def test_borderline_p_value_fires_at_005(self):
+        """p=0.05 exactly → BORDERLINE_P_VALUE warning."""
+        from src.ab_test import calculate_ab
+        # p=0.05 with control=50/2000, variant=70/2000
+        result = calculate_ab({
+            "control_conversions": 50,
+            "control_total": 2000,
+            "variant_conversions": 70,
+            "variant_total": 2000
+        })
+        codes = [w.code.value for w in result.warnings]
+        assert "BORDERLINE_P_VALUE" in codes
+
+    def test_borderline_p_value_fires_at_010(self):
+        """p≈0.09 → BORDERLINE_P_VALUE warning (0.05 ≤ p ≤ 0.10)."""
+        from src.ab_test import calculate_ab
+        # 100/5000 vs 125/5000 gives p≈0.09
+        result = calculate_ab({
+            "control_conversions": 100,
+            "control_total": 5000,
+            "variant_conversions": 125,
+            "variant_total": 5000
+        })
+        codes = [w.code.value for w in result.warnings]
+        assert "BORDERLINE_P_VALUE" in codes
+
+    def test_no_borderline_above_010(self):
+        """p > 0.10 → no BORDERLINE_P_VALUE."""
+        from src.ab_test import calculate_ab
+        result = calculate_ab({
+            "control_conversions": 100,
+            "control_total": 5000,
+            "variant_conversions": 110,
+            "variant_total": 5000
+        })
+        codes = [w.code.value for w in result.warnings]
+        assert "BORDERLINE_P_VALUE" not in codes
+
+    def test_no_borderline_below_005(self):
+        """p < 0.05 → no BORDERLINE_P_VALUE (regular significant result)."""
+        from src.ab_test import calculate_ab
+        result = calculate_ab({
+            "control_conversions": 100,
+            "control_total": 5000,
+            "variant_conversions": 140,
+            "variant_total": 5000
+        })
+        codes = [w.code.value for w in result.warnings]
+        assert "BORDERLINE_P_VALUE" not in codes
+
+    def test_borderline_warning_severity_is_warning(self):
+        """BORDERLINE_P_VALUE must have severity=warning."""
+        from src.ab_test import calculate_ab
+        result = calculate_ab({
+            "control_conversions": 50,
+            "control_total": 2000,
+            "variant_conversions": 70,
+            "variant_total": 2000
+        })
+        borderline = [w for w in result.warnings if w.code.value == "BORDERLINE_P_VALUE"]
+        assert len(borderline) == 1
+        assert borderline[0].severity == "warning"
