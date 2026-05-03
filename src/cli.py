@@ -30,6 +30,7 @@ def main():
     pass
 
 
+@main.command("bayes")
 @click.option("--control", required=True, help="Control group: conversions/total (e.g., 100/5000)")
 @click.option("--variant", required=True, help="Variant group: conversions/total (e.g., 120/5000)")
 @click.option("--name", default="variant_1", help="Variant name")
@@ -568,7 +569,7 @@ def show_version():
 @click.option("--validate", is_flag=True, help="Validate schema.json is up-to-date with current code")
 def schema_cmd(validate):
     """Print or validate the schema contract (schema.json)."""
-    import generate_schema
+    from src import generate_schema
     schema = generate_schema.generate_schema()
     click.echo(json.dumps(schema, indent=2))
 
