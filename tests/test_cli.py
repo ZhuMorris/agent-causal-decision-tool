@@ -250,7 +250,149 @@ class TestVersionAndHelp:
         assert "Commands:" in result.stdout
 
 
-class TestValidateInput:
+class TestABSaveFlag:
+    """Test --save flag on ab/did/plan/bayes commands."""
+
+    def test_ab_save_flag(self, tmp_path):
+        """ab --save writes experiment to store."""
+        from src import store
+        old_path = store.DB_PATH
+        db = tmp_path / "hist.db"
+        store.DB_PATH = db
+        result = runner.invoke(main, [
+            "ab", "--control", "100/5000", "--variant", "130/5000", "--save"
+        ])
+        assert result.exit_code == 0
+        store.DB_PATH = old_path
+
+    def test_did_save_flag(self, tmp_path):
+        """did --save writes experiment to store."""
+        from src import store
+        old_path = store.DB_PATH
+        db = tmp_path / "hist.db"
+        store.DB_PATH = db
+        result = runner.invoke(main, [
+            "did", "--pre-control", "1000", "--post-control", "1100",
+            "--pre-treated", "900", "--post-treated", "1150", "--save"
+        ])
+        assert result.exit_code == 0
+        store.DB_PATH = old_path
+
+
+class TestHistoryTextMode:
+    """Test history --format text (text formatter path)."""
+
+    def test_history_text_mode(self, tmp_path):
+        """history --format text shows a table."""
+        from src import store
+        old_path = store.DB_PATH
+        db = tmp_path / "hist.db"
+        store.DB_PATH = db
+        import json
+        # Save an experiment first
+        data = {
+            "mode": "ab_test",
+            "inputs": {"control_conversions": 100, "control_total": 5000,
+                       "variant_conversions": 130, "variant_total": 5000},
+            "recommendation": {"decision": "ship", "confidence": "medium", "summary": "test"},
+            "statistics": {},
+            "warnings": [],
+            "audit": {}
+        }
+        store.save_experiment(json.dumps(data), "ab_test", json.dumps(data["inputs"]))
+        result = runner.invoke(main, ["history", "--format", "text"])
+        assert result.exit_code == 0
+        assert "ID" in result.stdout
+        store.DB_PATH = old_path
+
+
+class TestDidNBootstrapBoundary:
+    """Test --n-bootstrap edge values."""
+
+    def test_did_n_bootstrap_minimum(self):
+        """--n-bootstrap 500 should not crash (minimum allowed value)."""
+        result = runner.invoke(main, [
+            "did", "--pre-control", "5000", "--post-control", "5500",
+            "--pre-treated", "5000", "--post-treated", "6000",
+            "--n-bootstrap", "500"
+        ])
+        assert result.exit_code == 0
+
+    def test_did_n_bootstrap_large(self):
+        """--n-bootstrap 5000 should work."""
+        result = runner.invoke(main, [
+            "did", "--pre-control", "5000", "--post-control", "5500",
+            "--pre-treated", "5000", "--post-treated", "6000",
+            "--n-bootstrap", "5000"
+        ])
+        assert result.exit_code == 0
+
+
+class TestCohortBreakdownJsonInput:
+    """Test cohort-breakdown --json with valid JSON input."""
+
+    def test_cohort_json_option(self):
+        """cohort-breakdown --json with valid segment JSON."""
+        import json
+        cohort = {
+            "experiment_id": "test-exp",
+            "metric": "conversion_rate",
+            "segments": [
+                {"segment_name": "new_users", "segment_definition_note": "first visit",
+                 "control_conversions": 50, "control_total": 2000,
+                 "variant_conversions": 65, "variant_total": 2000}
+            ]
+        }
+        result = runner.invoke(main, [
+            "cohort-breakdown", "--json", json.dumps(cohort)
+        ])
+        assert result.exit_code == 0, result.stderr
+
+
+class TestABTextFormatter:
+    """Test --format text path for ab command."""
+
+    def test_ab_format_text_shows_recommendation(self):
+        result = runner.invoke(main, [
+            "ab", "--control", "100/5000", "--variant", "130/5000", "--format", "text"
+        ])
+        assert result.exit_code == 0
+        # Text formatter should show decision
+        assert any(k in result.stdout.lower() for k in ["ship", "reject", "keep_running", "decision"])
+
+
+class TestBayesTextFormatter:
+    """Test --format text path for bayes command."""
+
+    def test_bayes_format_text_shows_recommendation(self):
+        result = runner.invoke(main, [
+            "bayes", "--control", "100/5000", "--variant", "130/5000", "--format", "text"
+        ])
+        assert result.exit_code == 0
+        assert any(k in result.stdout.lower() for k in ["ship", "reject", "keep_running", "decision"])
+
+
+class TestCompareWithMultipleExperiments:
+    """Test compare with 3+ experiments via store."""
+
+    def test_compare_three_experiments(self, tmp_path):
+        from src import store
+        old_path = store.DB_PATH
+        db = tmp_path / "hist.db"
+        store.DB_PATH = db
+        import json
+        for i in range(3):
+            data = {
+                "mode": "ab_test",
+                "inputs": {"control_conversions": 100, "control_total": 5000,
+                           "variant_conversions": 130 + i*5, "variant_total": 5000},
+                "recommendation": {"decision": "ship", "confidence": "medium", "summary": f"exp{i}"},
+                "statistics": {}, "warnings": [], "audit": {}
+            }
+            store.save_experiment(json.dumps(data), "ab_test", json.dumps(data["inputs"]))
+        result = runner.invoke(main, ["compare", "1", "2", "3"])
+        assert result.exit_code == 0
+        store.DB_PATH = old_path
     def test_validate_valid_ab_input(self):
         result = runner.invoke(main, [
             "validate-input", "--json",

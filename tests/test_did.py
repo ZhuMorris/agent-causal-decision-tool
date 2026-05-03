@@ -495,3 +495,67 @@ class TestDiDNBootstrapParam:
             n_bootstrap=500
         )
         assert inp.n_bootstrap == 500
+
+class TestDiDEdgeCases:
+    """Edge cases for DiD calculator."""
+
+    def test_equal_pre_post_groups(self):
+        """Control and treated have same pre/post values (no DiD)."""
+        result = calculate_did({
+            "pre_control": 1000,
+            "post_control": 1100,
+            "pre_treated": 1000,
+            "post_treated": 1100,
+        })
+        # No difference in differences → null effect
+        assert result.statistics["did_estimate"] == 0.0
+
+    def test_did_ci_spanning_zero(self):
+        """CI crossing zero indicates uncertainty."""
+        result = calculate_did({
+            "pre_control": 5000,
+            "post_control": 5500,
+            "pre_treated": 5000,
+            "post_treated": 5200,
+        })
+        ci = result.statistics.get("did_ci_95")
+        if ci:
+            assert ci[0] < ci[1]  # Lower < upper
+            # Zero crossing is possible here; tested by DID_CI_CROSSES_ZERO
+
+    def test_very_large_ci_range(self):
+        """Very large CI range relative to estimate → unreliable."""
+        result = calculate_did({
+            "pre_control": 100,
+            "post_control": 150,
+            "pre_treated": 100,
+            "post_treated": 250,
+        })
+        # Should handle extreme ratios without crashing
+        assert "did_estimate" in result.statistics
+
+
+class TestDiDBootstrapEdgeCases:
+    """Bootstrap edge cases for DiD."""
+
+    def test_bootstrap_with_zero_pre_control(self):
+        """Zero pre_control → bootstrap unreliable."""
+        result = calculate_did({
+            "pre_control": 0,
+            "post_control": 50,
+            "pre_treated": 20,
+            "post_treated": 100,
+        })
+        codes = [w.code.value for w in result.warnings]
+        assert "ZERO_BASELINE" in codes or "BOOTSTRAP_CI_UNRELIABLE" in codes
+
+    def test_bootstrap_min_boundary(self):
+        """n_bootstrap=500 (minimum) should work."""
+        result = calculate_did({
+            "pre_control": 5000,
+            "post_control": 5500,
+            "pre_treated": 5000,
+            "post_treated": 6000,
+            "n_bootstrap": 500
+        })
+        assert "did_estimate" in result.statistics

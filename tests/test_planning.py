@@ -424,3 +424,66 @@ class TestBaselineWarnings:
         assert "BASELINE_NEAR_ZERO" not in codes
         # BASELINE_VERY_LOW should still fire since 0.001 < 0.005
         assert "BASELINE_VERY_LOW" in codes
+
+class TestPlanningEdgeCases:
+    """Edge cases for planning calculator."""
+
+    def test_zero_traffic(self):
+        """Zero daily traffic should be handled gracefully."""
+        result = calculate_plan({
+            "baseline_conversion_rate": 0.02,
+            "mde_pct": 20,
+            "daily_traffic": 0,
+        })
+        # Should not crash; feasibility decision may be not_recommended or escalate
+        assert result.planning["feasibility"] in ["not_recommended", "infeasible"]
+
+    def test_mde_over_100_percent(self):
+        """MDE > 100% should be capped or handled gracefully."""
+        result = calculate_plan({
+            "baseline_conversion_rate": 0.02,
+            "mde_pct": 200,
+            "daily_traffic": 10000,
+        })
+        # Should not crash; planning should complete
+        assert "estimated_days" in result.planning or "total_required" in result.planning
+
+    def test_allocation_ratio_uneven(self):
+        """Highly uneven allocation (90/10) should work."""
+        result = calculate_plan({
+            "baseline_conversion_rate": 0.02,
+            "mde_pct": 10,
+            "daily_traffic": 5000,
+            "allocation": "custom",
+            "allocation_ratio": "0.9/0.1"
+        })
+        assert result.planning["allocation_used"]["control"] == 0.9
+        assert result.planning["allocation_used"]["variant"] == 0.1
+
+    def test_mde_ci_95_order(self):
+        """mde_ci_95 lower < upper."""
+        result = calculate_plan({
+            "baseline_conversion_rate": 0.05,
+            "mde_pct": 10,
+            "daily_traffic": 10000,
+        })
+        ci = result.planning.get("mde_ci_95")
+        if ci:
+            assert ci[0] < ci[1]
+
+    def test_power_extreme_values(self):
+        """Power very close to 1 or very low values."""
+        result_low = calculate_plan({
+            "baseline_conversion_rate": 0.02,
+            "mde_pct": 20,
+            "daily_traffic": 10000,
+            "power": 0.5,
+        })
+        result_high = calculate_plan({
+            "baseline_conversion_rate": 0.02,
+            "mde_pct": 20,
+            "daily_traffic": 10000,
+            "power": 0.99,
+        })
+        # Higher power → larger required sample
+        assert result_high.planning["total_required"] >= result_low.planning["total_required"]

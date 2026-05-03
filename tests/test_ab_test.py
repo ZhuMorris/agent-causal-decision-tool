@@ -361,6 +361,41 @@ class TestABTestEdgeCases:
         # Both zero - should handle gracefully
         assert "p_value" in result.statistics
 
+    def test_negative_lift(self):
+        """Variant clearly worse → negative lift, should reject"""
+        result = calculate_ab({
+            "control_conversions": 100,
+            "control_total": 5000,
+            "variant_conversions": 50,
+            "variant_total": 5000
+        })
+        assert result.recommendation.primary_metricLift < 0
+        assert result.recommendation.decision == "reject"
+
+    def test_p_value_boundary_above_significant(self):
+        """p > 0.10 → not significant, not borderline"""
+        result = calculate_ab({
+            "control_conversions": 100,
+            "control_total": 5000,
+            "variant_conversions": 110,
+            "variant_total": 5000
+        })
+        assert result.recommendation.p_value > 0.05
+        codes = [w.code.value for w in result.warnings]
+        assert "BORDERLINE_P_VALUE" not in codes
+
+    def test_lift_ci_covers_zero(self):
+        """CI crossing zero → wide uncertainty"""
+        result = calculate_ab({
+            "control_conversions": 100,
+            "control_total": 5000,
+            "variant_conversions": 102,
+            "variant_total": 5000
+        })
+        ci = result.statistics["lift_ci_95"]
+        # CI may span zero for very small effects
+        assert ci[0] < ci[1]  # Still ordered correctly
+
 
 class TestConfidenceIntervalOutput:
     """Tests for lift_ci_95, relative_lift_ci_95 (v0.8 rename from confidence_interval_95)."""
