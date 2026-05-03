@@ -209,6 +209,15 @@ def cohort_breakdown(input_data: dict) -> dict:
             "message": f"{n_segs} segments tested, correction={correction_method}",
             "severity": "info"
         })
+    if n_segs > 0 and alpha / n_segs < 0.01:
+        all_warnings.append({
+            "code": "CORRECTION_CONSERVATIVE",
+            "message": (
+                f"Effective per-test alpha after correction ({alpha/n_segs:.4f}) is below 0.01 "
+                f"with {n_segs} segments — correction is very conservative; true positives may be suppressed."
+            ),
+            "severity": "warning"
+        })
     if interaction_flag:
         all_warnings.append({
             "code": "interaction_flag",

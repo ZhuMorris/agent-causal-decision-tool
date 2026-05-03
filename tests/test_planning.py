@@ -89,7 +89,7 @@ class TestPlanning:
         assert "LOW_TRAFFIC" in warning_codes
 
     def test_warns_on_long_experiment(self):
-        """Estimated days > 30 → LONG_EXP warning"""
+        """Estimated days > 30 → SLOW_EXPERIMENT warning"""
         result = calculate_plan({
             "baseline_conversion_rate": 0.02,
             "mde_pct": 10,
@@ -100,10 +100,10 @@ class TestPlanning:
             "allocation_ratio": None
         })
         warning_codes = [w.code for w in result.warnings]
-        assert "LONG_EXP" in warning_codes
+        assert "SLOW_EXPERIMENT" in warning_codes
 
     def test_not_recommended_suggests_did(self):
-        """When not_recommended, should suggest DiD"""
+        """When infeasible, should suggest DiD"""
         result = calculate_plan({
             "baseline_conversion_rate": 0.02,
             "mde_pct": 5,
@@ -114,8 +114,8 @@ class TestPlanning:
             "allocation_ratio": None
         })
         warning_codes = [w.code for w in result.warnings]
-        assert "NOT_RECOMMENDED" in warning_codes
-        did_warning = next((w for w in result.warnings if w.code == "NOT_RECOMMENDED"), None)
+        assert "INFEASIBLE_EXPERIMENT" in warning_codes
+        did_warning = next((w for w in result.warnings if w.code == "INFEASIBLE_EXPERIMENT"), None)
         assert did_warning is not None
         assert "DiD" in did_warning.message
 

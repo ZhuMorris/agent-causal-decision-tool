@@ -2,7 +2,7 @@
 
 import json
 from math import ceil
-from schema import PlanningInput, PlanningOutput, Recommendation, WarningDetail
+from schema import PlanningInput, PlanningOutput, Recommendation, WarningDetail, WarningCode
 
 
 def calculate_plan(input_data: dict) -> PlanningOutput:
@@ -84,28 +84,28 @@ def calculate_plan(input_data: dict) -> PlanningOutput:
     
     if daily_traffic < 100:
         warnings.append(WarningDetail(
-            code="LOW_TRAFFIC",
+            code=WarningCode.LOW_TRAFFIC,
             message=f"Daily traffic per arm ({daily_traffic}) is below recommended minimum of 100. Results may be unreliable.",
             severity="warning"
         ))
-    
+
     if estimated_days > 30:
         warnings.append(WarningDetail(
-            code="LONG_EXP",
+            code=WarningCode.SLOW_EXPERIMENT,
             message=f"Estimated duration ({estimated_days:.1f} days) exceeds 30 days. Season effects may confound results.",
             severity="warning"
         ))
-    
+
     if feasibility == "not_recommended":
         warnings.append(WarningDetail(
-            code="NOT_RECOMMENDED",
+            code=WarningCode.INFEASIBLE_EXPERIMENT,
             message="Consider using DiD (Difference-in-Differences) if you cannot wait for enough traffic.",
             severity="warning"
         ))
-    
+
     if mde_fraction < 0.01:
         warnings.append(WarningDetail(
-            code="SMALL_MDE",
+            code=WarningCode.SMALL_MDE,
             message=f"MDE of {mde_pct}% is very small. May require impossibly large sample. Check feasibility.",
             severity="info"
         ))

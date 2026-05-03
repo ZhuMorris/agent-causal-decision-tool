@@ -50,7 +50,7 @@ class TestDiD:
             "post_treated": 950   # Only 5% growth - diverges!
         })
         warning_codes = [w.code for w in result.warnings]
-        assert any("DIVERGE" in code for code in warning_codes)
+        assert any(c in ("PARALLEL_TRENDS_VIOLATED", "PARALLEL_TRENDS_WEAK") for c in warning_codes)
 
     def test_zero_baseline_critical_warning(self):
         """Zero baseline should trigger critical warning"""

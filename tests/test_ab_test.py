@@ -252,7 +252,7 @@ class TestSequentialEarlyStopping:
         assert result.sequential_summary.reason == "conditions_not_met"
         assert result.recommendation.decision in ["ship", "keep_running", "reject", "escalate"]
         warning_codes = [w.code for w in result.warnings]
-        assert "sequential_conditions_not_met" in warning_codes
+        assert "SEQUENTIAL_CONDITIONS_NOT_MET" in warning_codes
 
     def test_invalid_timestamps_no_crash(self):
         """Sequential enabled with unparseable timestamps → conditions_not_met, no crash"""
@@ -272,7 +272,7 @@ class TestSequentialEarlyStopping:
         assert result.early_stop_applied is False
         assert result.sequential_summary.reason == "conditions_not_met"
         warning_codes = [w.code for w in result.warnings]
-        assert "sequential_conditions_not_met" in warning_codes
+        assert "SEQUENTIAL_CONDITIONS_NOT_MET" in warning_codes
 
     def test_sequential_disabled_no_sequential_fields(self):
         """Sequential disabled → sequential_reviewed=False, sequential_summary=None"""
@@ -307,7 +307,7 @@ class TestSequentialEarlyStopping:
         assert result.recommendation.decision == "reject"
 
     def test_early_stop_warning_in_warnings(self):
-        """Early stop applied → warning with code 'early_stop_applied'"""
+        """Early stop applied → warning with code SEQUENTIAL_EARLY_STOP"""
         result = calculate_ab({
             "control_conversions": 100,
             "control_total": 5000,
@@ -323,7 +323,7 @@ class TestSequentialEarlyStopping:
             "max_runtime_days": 30,
         })
         warning_codes = [w.code for w in result.warnings]
-        assert "early_stop_applied" in warning_codes
+        assert "SEQUENTIAL_EARLY_STOP" in warning_codes
 
 
 class TestABTestEdgeCases:

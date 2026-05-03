@@ -7,7 +7,7 @@ from scipy import stats
 from typing import Optional
 from schema import (
     ABTestInput, ABTestOutput, Recommendation, WarningDetail, TrafficStats,
-    SequentialSummary
+    SequentialSummary, WarningCode
 )
 
 
@@ -65,7 +65,7 @@ def calculate_ab(input_data: dict) -> ABTestOutput:
     # Traffic warnings
     if c_total < min_sample or v_total < min_sample:
         warnings.append(WarningDetail(
-            code="LOW_TRAFFIC",
+            code=WarningCode.LOW_TRAFFIC,
             message=f"Traffic too low. Control: {c_total}, Variant: {v_total}. Minimum recommended: {min_sample}",
             severity="warning"
         ))
@@ -73,7 +73,7 @@ def calculate_ab(input_data: dict) -> ABTestOutput:
     # Small effect warning
     if abs(lift) < 1:
         warnings.append(WarningDetail(
-            code="SMALL_EFFECT",
+            code=WarningCode.SMALL_EFFECT,
             message=f"Effect size is very small ({lift:.2f}%). May not be practically significant.",
             severity="info"
         ))
@@ -105,7 +105,7 @@ def calculate_ab(input_data: dict) -> ABTestOutput:
                 decision = "keep_running"
                 confidence = "low"
                 warnings.append(WarningDetail(
-                    code="INCONCLUSIVE",
+                    code=WarningCode.INCONCLUSIVE,
                     message=f"p-value={p_value:.4f} not significant but trending. Keep running.",
                     severity="info"
                 ))
@@ -114,7 +114,7 @@ def calculate_ab(input_data: dict) -> ABTestOutput:
                 decision = "escalate"
                 confidence = "low"
                 warnings.append(WarningDetail(
-                    code="NOT_SIGNIFICANT",
+                    code=WarningCode.NOT_SIGNIFICANT,
                     message=f"p-value={p_value:.4f} far from significant. Consider stopping.",
                     severity="warning"
                 ))
@@ -349,7 +349,7 @@ def _evaluate_sequential(
         if not sample_ok:
             reason_str.append(f"sample {observed_sample_per_arm} < {ab_input.min_sample_per_arm}")
         seq_warning = WarningDetail(
-            code="sequential_conditions_not_met",
+            code=WarningCode.SEQUENTIAL_CONDITIONS_NOT_MET,
             message=f"Sequential conditions not met ({'; '.join(reason_str)}). Normal decision applied.",
             severity="info"
         )
@@ -367,7 +367,7 @@ def _evaluate_sequential(
     # Check max runtime exceeded
     if ab_input.max_runtime_days is not None and observed_runtime_days > ab_input.max_runtime_days:
         seq_warning = WarningDetail(
-            code="max_runtime_exceeded",
+            code=WarningCode.MAX_RUNTIME_EXCEEDED,
             message=f"Max runtime {ab_input.max_runtime_days}d exceeded ({observed_runtime_days:.1f}d) without strong result. Escalating.",
             severity="warning"
         )
@@ -404,7 +404,7 @@ def _evaluate_sequential(
             )
             early_stop_applied = True
             seq_warning = WarningDetail(
-                code="early_stop_applied",
+                code=WarningCode.SEQUENTIAL_EARLY_STOP,
                 message=(
                     f"Early stop applied (p={p_value:.4f} < {ab_input.early_stop_p_threshold}). "
                     f"Decision triggered by p-value threshold."

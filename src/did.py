@@ -1,7 +1,7 @@
 """Difference-in-Differences analysis module"""
 
 import json
-from schema import DIDInput, DIDOutput, Recommendation, WarningDetail, DIDDiagnostics
+from schema import DIDInput, DIDOutput, Recommendation, WarningDetail, DIDDiagnostics, WarningCode
 
 
 def calculate_did(input_data: dict) -> DIDOutput:
@@ -32,7 +32,7 @@ def calculate_did(input_data: dict) -> DIDOutput:
     # Basic sanity checks
     if pre_c == 0 or pre_t == 0:
         warnings.append(WarningDetail(
-            code="ZERO_BASELINE",
+            code=WarningCode.ZERO_BASELINE,
             message="Pre-period values cannot be zero for reliable DiD.",
             severity="critical"
         ))
@@ -45,19 +45,19 @@ def calculate_did(input_data: dict) -> DIDOutput:
 
     if ratio_diff > 0.5:
         warnings.append(WarningDetail(
-            code="TRENDS_DIVERGE",
+            code=WarningCode.PARALLEL_TRENDS_VIOLATED,
             message=f"Control and treated groups show very different pre-to-post ratios ({ctrl_ratio:.2f} vs {treat_ratio:.2f}). Parallel trends assumption may not hold.",
             severity="critical"
         ))
     elif ratio_diff > 0.2:
         warnings.append(WarningDetail(
-            code="TRENDS_SLIGHTLY_DIVERGE",
+            code=WarningCode.PARALLEL_TRENDS_WEAK,
             message=f"Ratios diverge somewhat ({ctrl_ratio:.2f} vs {treat_ratio:.2f}). Monitor closely.",
             severity="warning"
         ))
 
     warnings.append(WarningDetail(
-        code="AGGREGATE_DATA",
+        code=WarningCode.AGGREGATE_DATA,
         message="Analysis performed on aggregated data. For robust inference, use individual-level data with clustered SEs.",
         severity="info"
     ))
@@ -68,7 +68,7 @@ def calculate_did(input_data: dict) -> DIDOutput:
         confidence = "low"
         summary = f"DiD estimate is {did_estimate:.2f} ({relative_did:.2f}%), too uncertain to act on."
         warnings.append(WarningDetail(
-            code="SMALL_EFFECT",
+            code=WarningCode.SMALL_EFFECT,
             message=f"Effect size {relative_did:.2f}% is below practical threshold. Escalate for judgment.",
             severity="info"
         ))
@@ -88,7 +88,7 @@ def calculate_did(input_data: dict) -> DIDOutput:
     else:
         if post_t > pre_t and post_c > pre_c:
             warnings.append(WarningDetail(
-                code="AMBIGUOUS",
+                code=WarningCode.BOTH_GROUPS_GREW,
                 message="Both groups grew. Cannot separate treatment effect from time trend.",
                 severity="warning"
             ))
@@ -103,15 +103,18 @@ def calculate_did(input_data: dict) -> DIDOutput:
     # ── Diagnostics ─────────────────────────────────────────────────────────────
     diagnostics = _compute_did_diagnostics(did_input, did_estimate)
 
+    # Emit warnings for diagnostic fragility flags
+    _append_diagnostic_warnings(warnings, did_input, diagnostics)
+
     # recommended_next_action & explanation based on caution level
     recommended_next_action, explanation = _build_did_narrative(
         decision, relative_did, diagnostics
     )
 
     if diagnostics.recommended_caution_level == "high":
-        if "did_result_should_be_reviewed_by_human" not in [w.code for w in warnings]:
+        if WarningCode.AGGREGATE_DATA_DID not in [w.code for w in warnings]:
             warnings.append(WarningDetail(
-                code="did_result_should_be_reviewed_by_human",
+                code=WarningCode.AGGREGATE_DATA_DID,
                 message="Caution is high; this result should be reviewed by a human. Do not treat this as equivalent to a randomized experiment.",
                 severity="warning"
             ))
@@ -347,6 +350,54 @@ def _flag_explanation(flag: str) -> str:
         "imbalanced_groups": "treatment/control ratio > 3x or < 1/3x — groups not comparable",
         "large_effect_small_sample": "large effect with small sample — possible confounding",
     }.get(flag, flag)
+
+
+def _append_diagnostic_warnings(warnings: list, did_input: DIDInput, diagnostics: DIDDiagnostics) -> None:
+    """Add WarningDetail entries for each active fragility flag."""
+    existing_codes = {w.code for w in warnings}
+
+    if did_input.pre_periods is None:
+        if WarningCode.PARALLEL_TRENDS_NO_DATA not in existing_codes:
+            warnings.append(WarningDetail(
+                code=WarningCode.PARALLEL_TRENDS_NO_DATA,
+                message="No pre-period count provided; parallel trends cannot be assessed.",
+                severity="info"
+            ))
+    elif did_input.pre_periods <= 1:
+        if WarningCode.SINGLE_PRE_PERIOD not in existing_codes:
+            warnings.append(WarningDetail(
+                code=WarningCode.SINGLE_PRE_PERIOD,
+                message="Only one pre-period — parallel trends assumption cannot be verified.",
+                severity="warning"
+            ))
+
+    t_count = did_input.treatment_observation_count
+    c_count = did_input.control_observation_count
+
+    if (t_count is not None and t_count < 100) or (c_count is not None and c_count < 100):
+        if WarningCode.SMALL_SAMPLE not in existing_codes:
+            warnings.append(WarningDetail(
+                code=WarningCode.SMALL_SAMPLE,
+                message="Observation count < 100 in at least one group — results unreliable.",
+                severity="warning"
+            ))
+
+    if t_count is not None and c_count is not None and c_count > 0:
+        ratio = t_count / c_count
+        if (ratio > 3 or ratio < 1 / 3) and WarningCode.IMBALANCED_GROUPS not in existing_codes:
+            warnings.append(WarningDetail(
+                code=WarningCode.IMBALANCED_GROUPS,
+                message=f"Treatment/control ratio {ratio:.1f}x — groups may not be comparable.",
+                severity="warning"
+            ))
+
+    if "large_effect_small_sample" in diagnostics.fragility_flags:
+        if WarningCode.LARGE_EFFECT_SMALL_SAMPLE not in existing_codes:
+            warnings.append(WarningDetail(
+                code=WarningCode.LARGE_EFFECT_SMALL_SAMPLE,
+                message="Large effect with small sample — possible confounding; treat with caution.",
+                severity="warning"
+            ))
 
 
 def _build_error_output(input_data: dict, error_msg: str, warnings: list) -> DIDOutput:

@@ -2,7 +2,7 @@
 
 import json
 import numpy as np
-from schema import ABTestInput, Recommendation, WarningDetail
+from schema import ABTestInput, Recommendation, WarningDetail, WarningCode
 
 
 def calculate_bayes_ab(input_data: dict, n_samples: int = 20000) -> dict:
@@ -67,24 +67,31 @@ def calculate_bayes_ab(input_data: dict, n_samples: int = 20000) -> dict:
     min_sample = 500
     if c_total < min_sample or v_total < min_sample:
         warnings.append(WarningDetail(
-            code="LOW_TRAFFIC",
+            code=WarningCode.LOW_TRAFFIC,
             message=f"Traffic relatively low (control={c_total}, variant={v_total}). Prior heavily influences posterior.",
             severity="warning"
         ))
-    
+
+    if c_total + v_total < 200:
+        warnings.append(WarningDetail(
+            code=WarningCode.PRIOR_DOMINATES,
+            message=f"Very low total traffic ({c_total + v_total}). Jeffreys prior dominates posterior; interpret with caution.",
+            severity="warning"
+        ))
+
     if p_variant_wins > 0.5 and p_variant_wins < SHIP_THRESHOLD:
         warnings.append(WarningDetail(
-            code="INCONCLUSIVE",
+            code=WarningCode.INCONCLUSIVE,
             message=f"P(variant wins)={p_variant_wins:.3f} — not conclusive enough to ship. Need >={SHIP_THRESHOLD}.",
             severity="warning"
         ))
-    
+
     # Small effect check
     if p_variant_wins > 0.5:
         lift_pct = (p_v - p_c) / p_c * 100 if p_c > 0 else 0
         if abs(lift_pct) < 1:
             warnings.append(WarningDetail(
-                code="SMALL_EFFECT",
+                code=WarningCode.SMALL_EFFECT,
                 message=f"Observed lift {lift_pct:.2f}% is very small. May not be practically significant.",
                 severity="info"
             ))

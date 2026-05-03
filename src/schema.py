@@ -1,8 +1,48 @@
 """Input/Output Schema definitions for Agent Causal Decision Tool"""
 
+from enum import Enum
 from pydantic import BaseModel, Field
 from typing import Optional, Literal
 from datetime import datetime
+
+
+class WarningCode(str, Enum):
+    """Canonical warning codes for all analysis modules."""
+    # A/B Test
+    LOW_TRAFFIC = "LOW_TRAFFIC"
+    SMALL_EFFECT = "SMALL_EFFECT"
+    INCONCLUSIVE = "INCONCLUSIVE"
+    NOT_SIGNIFICANT = "NOT_SIGNIFICANT"
+    BORDERLINE_P_VALUE = "BORDERLINE_P_VALUE"
+    CORRECTION_CONSERVATIVE = "CORRECTION_CONSERVATIVE"
+    SEQUENTIAL_EARLY_STOP = "SEQUENTIAL_EARLY_STOP"
+    SEQUENTIAL_CONDITIONS_NOT_MET = "SEQUENTIAL_CONDITIONS_NOT_MET"
+    MAX_RUNTIME_EXCEEDED = "MAX_RUNTIME_EXCEEDED"
+    # DiD
+    ZERO_BASELINE = "ZERO_BASELINE"
+    PARALLEL_TRENDS_VIOLATED = "PARALLEL_TRENDS_VIOLATED"
+    PARALLEL_TRENDS_WEAK = "PARALLEL_TRENDS_WEAK"
+    BOTH_GROUPS_GREW = "BOTH_GROUPS_GREW"
+    AGGREGATE_DATA = "AGGREGATE_DATA"
+    AGGREGATE_DATA_DID = "AGGREGATE_DATA_DID"
+    SINGLE_PRE_PERIOD = "SINGLE_PRE_PERIOD"
+    SMALL_SAMPLE = "SMALL_SAMPLE"
+    IMBALANCED_GROUPS = "IMBALANCED_GROUPS"
+    LARGE_EFFECT_SMALL_SAMPLE = "LARGE_EFFECT_SMALL_SAMPLE"
+    PARALLEL_TRENDS_NO_DATA = "PARALLEL_TRENDS_NO_DATA"
+    BOOTSTRAP_CI_UNRELIABLE = "BOOTSTRAP_CI_UNRELIABLE"
+    BOOTSTRAP_CI_WIDE = "BOOTSTRAP_CI_WIDE"
+    # Planning
+    SLOW_EXPERIMENT = "SLOW_EXPERIMENT"
+    INFEASIBLE_EXPERIMENT = "INFEASIBLE_EXPERIMENT"
+    SMALL_MDE = "SMALL_MDE"
+    BASELINE_VERY_LOW = "BASELINE_VERY_LOW"
+    # Bayesian
+    PRIOR_DOMINATES = "PRIOR_DOMINATES"
+    CREDIBLE_INTERVAL_WIDE = "CREDIBLE_INTERVAL_WIDE"
+    # Q6 / Q16 additions
+    DID_CI_CROSSES_ZERO = "DID_CI_CROSSES_ZERO"
+    BASELINE_NEAR_ZERO = "BASELINE_NEAR_ZERO"
 
 
 class ABTestInput(BaseModel):
@@ -53,7 +93,7 @@ class Recommendation(BaseModel):
 
 class WarningDetail(BaseModel):
     """Warning detail"""
-    code: str = Field(..., description="Warning code")
+    code: WarningCode = Field(..., description="Warning code")
     message: str = Field(..., description="Warning message")
     severity: Literal["info", "warning", "critical"]
 
