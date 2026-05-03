@@ -5,7 +5,7 @@ from math import sqrt
 from datetime import datetime
 from scipy import stats
 from typing import Optional
-from schema import (
+from .schema import (
     ABTestInput, ABTestOutput, Recommendation, WarningDetail, TrafficStats,
     SequentialSummary, WarningCode
 )

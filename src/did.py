@@ -1,7 +1,7 @@
 """Difference-in-Differences analysis module"""
 
 import json
-from schema import DIDInput, DIDOutput, Recommendation, WarningDetail, DIDDiagnostics, WarningCode
+from .schema import DIDInput, DIDOutput, Recommendation, WarningDetail, DIDDiagnostics, WarningCode
 import numpy as np
 
 

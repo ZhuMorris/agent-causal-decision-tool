@@ -7,7 +7,7 @@ audit chain traceability.
 from datetime import datetime
 from typing import Optional
 
-from utils.stats import (
+from .utils.stats import (
     two_proportion_z_test,
     benjamini_hochberg,
     segment_decision,

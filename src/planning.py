@@ -3,7 +3,7 @@
 import json
 from math import ceil
 from typing import Optional
-from schema import PlanningInput, PlanningOutput, Recommendation, WarningDetail, WarningCode
+from .schema import PlanningInput, PlanningOutput, Recommendation, WarningDetail, WarningCode
 
 
 def calculate_plan(input_data: dict) -> PlanningOutput:

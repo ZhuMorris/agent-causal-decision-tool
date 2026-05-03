@@ -22,5 +22,8 @@ dev = ["pytest>=7.0", "pytest-cov"]
 [project.scripts]
 agent-causal = "src.cli:main"
 
+[tool.setuptools]
+packages = ["src"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

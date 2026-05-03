@@ -2,7 +2,7 @@
 
 import json
 import numpy as np
-from schema import ABTestInput, Recommendation, WarningDetail, WarningCode
+from .schema import ABTestInput, Recommendation, WarningDetail, WarningCode
 
 
 def calculate_bayes_ab(input_data: dict, n_samples: int = 20000) -> dict:

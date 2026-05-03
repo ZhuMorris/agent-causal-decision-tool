@@ -6,13 +6,13 @@ import sys
 from pathlib import Path
 from importlib.metadata import version as _pkg_version, PackageNotFoundError
 
-from ab_test import calculate_ab
-from did import calculate_did
-from planning import calculate_plan
-from bayes import calculate_bayes_ab
-from audit import format_audit_text, check_experiment_maturity
-from cohort import cohort_breakdown
-import store
+from src.ab_test import calculate_ab
+from src.did import calculate_did
+from src.planning import calculate_plan
+from src.bayes import calculate_bayes_ab
+from src.audit import format_audit_text, check_experiment_maturity
+from src.cohort import cohort_breakdown
+from src import store
 
 
 def _get_version():

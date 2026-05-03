@@ -4,7 +4,7 @@ import json
 from importlib.metadata import version as _pkg_version
 from pydantic import BaseModel
 
-from schema import (
+from .schema import (
     ABTestInput, DIDInput, PlanningInput,
     ABTestOutput, DIDOutput, PlanningOutput,
     Recommendation, WarningDetail, TrafficStats,

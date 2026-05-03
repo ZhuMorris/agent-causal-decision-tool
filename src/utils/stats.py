@@ -139,7 +139,7 @@ def segment_decision(
 
 def sample_size_warning(control_total: int, variant_total: int, threshold: int = 100) -> list:
     """Check for sample-size warnings per segment."""
-    from schema import WarningDetail, WarningCode
+    from ..schema import WarningDetail, WarningCode
     warnings = []
     if control_total < threshold:
         warnings.append(WarningDetail(
