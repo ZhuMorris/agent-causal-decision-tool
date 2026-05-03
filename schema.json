@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.5.0",
+  "schema_version": "0.8.0",
   "schema_coverage": [
     "ab",
     "did",
@@ -153,6 +153,14 @@
           "title": "Post Treated",
           "type": "number"
         },
+        "n_bootstrap": {
+          "default": 2000,
+          "description": "Number of bootstrap resamples for DiD CI (500\u201310000)",
+          "maximum": 10000,
+          "minimum": 500,
+          "title": "N Bootstrap",
+          "type": "integer"
+        },
         "pre_periods": {
           "anyOf": [
             {
@@ -242,7 +250,8 @@
           "type": "number"
         },
         "daily_traffic": {
-          "description": "Daily traffic per arm",
+          "default": 1000,
+          "description": "Daily traffic per arm (used for mde_ci_95 calculation)",
           "title": "Daily Traffic",
           "type": "integer"
         },
@@ -283,8 +292,7 @@
       },
       "required": [
         "baseline_conversion_rate",
-        "mde_pct",
-        "daily_traffic"
+        "mde_pct"
       ],
       "title": "PlanningInput",
       "type": "object"
