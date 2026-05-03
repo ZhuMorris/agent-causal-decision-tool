@@ -1,5 +1,7 @@
 """Input/Output Schema definitions for Agent Causal Decision Tool"""
 
+from importlib.metadata import version as _pkg_version
+
 from enum import Enum
 from pydantic import BaseModel, Field
 from typing import Optional, Literal
@@ -120,7 +122,7 @@ class SequentialSummary(BaseModel):
 
 class ABTestOutput(BaseModel):
     """A/B test output schema"""
-    version: str = "1.0"
+    schema_version: str = Field(default_factory=lambda: _pkg_version("agent-causal-decision-tool"), description="Schema contract version for this output")
     timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
     mode: Literal["ab_test"] = "ab_test"
     recommendation: Recommendation
@@ -150,7 +152,7 @@ class PlanningInput(BaseModel):
 
 class PlanningOutput(BaseModel):
     """Experiment planning output schema"""
-    version: str = "1.0"
+    schema_version: str = Field(default_factory=lambda: _pkg_version("agent-causal-decision-tool"), description="Schema contract version for this output")
     timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
     mode: Literal["planning"] = "planning"
     recommendation: Recommendation
@@ -174,7 +176,7 @@ class DIDDiagnostics(BaseModel):
 
 class DIDOutput(BaseModel):
     """DiD output schema"""
-    version: str = "1.0"
+    schema_version: str = Field(default_factory=lambda: _pkg_version("agent-causal-decision-tool"), description="Schema contract version for this output")
     timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
     mode: Literal["did"] = "did"
     recommendation: Recommendation

@@ -1,0 +1,1507 @@
+{
+  "schema_version": "0.5.0",
+  "schema_coverage": [
+    "ab",
+    "did",
+    "plan"
+  ],
+  "schema_coverage_pending": [
+    "bayes",
+    "cohort"
+  ],
+  "severity_contract": {
+    "info": "Agent should log and continue. No blocking action required. Informational only \u2014 does not prevent shipping or escalation decisions.",
+    "warning": "Agent should log and consider but may proceed with caution. Used when evidence is weaker than ideal or when some assumption is relaxed but the result is still actionable.",
+    "critical": "Agent must log and either block or escalate. Result should not be treated as reliable without human review. Used when an assumption fundamental to the analysis is violated or when sample size is insufficient for any reliable inference."
+  },
+  "definitions": {
+    "ABTestInput": {
+      "description": "A/B test input schema",
+      "properties": {
+        "control_conversions": {
+          "description": "Conversions in control group",
+          "title": "Control Conversions",
+          "type": "integer"
+        },
+        "control_total": {
+          "description": "Total users in control group",
+          "title": "Control Total",
+          "type": "integer"
+        },
+        "variant_conversions": {
+          "description": "Conversions in variant group",
+          "title": "Variant Conversions",
+          "type": "integer"
+        },
+        "variant_total": {
+          "description": "Total users in variant group",
+          "title": "Variant Total",
+          "type": "integer"
+        },
+        "variant_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "variant_1",
+          "description": "Name of variant",
+          "title": "Variant Name"
+        },
+        "sequential_enabled": {
+          "default": false,
+          "description": "Enable sequential early stopping logic",
+          "title": "Sequential Enabled",
+          "type": "boolean"
+        },
+        "experiment_start_time": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISO 8601 start timestamp",
+          "title": "Experiment Start Time"
+        },
+        "experiment_end_time": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISO 8601 end timestamp",
+          "title": "Experiment End Time"
+        },
+        "min_runtime_days": {
+          "default": 7,
+          "description": "Minimum days before early stop is considered",
+          "title": "Min Runtime Days",
+          "type": "integer"
+        },
+        "min_sample_per_arm": {
+          "default": 2000,
+          "description": "Minimum sample per arm before early stop is considered",
+          "title": "Min Sample Per Arm",
+          "type": "integer"
+        },
+        "early_stop_p_threshold": {
+          "default": 0.01,
+          "description": "p-value threshold for early stop (conservative)",
+          "title": "Early Stop P Threshold",
+          "type": "number"
+        },
+        "max_runtime_days": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Hard cap on runtime; escalate if exceeded without strong result",
+          "title": "Max Runtime Days"
+        },
+        "practical_significance_threshold": {
+          "default": 0.01,
+          "description": "Practical significance threshold for lift",
+          "title": "Practical Significance Threshold",
+          "type": "number"
+        }
+      },
+      "required": [
+        "control_conversions",
+        "control_total",
+        "variant_conversions",
+        "variant_total"
+      ],
+      "title": "ABTestInput",
+      "type": "object"
+    },
+    "DIDInput": {
+      "description": "Difference-in-Differences input schema",
+      "properties": {
+        "pre_control": {
+          "description": "Control group metric before treatment",
+          "title": "Pre Control",
+          "type": "number"
+        },
+        "post_control": {
+          "description": "Control group metric after treatment",
+          "title": "Post Control",
+          "type": "number"
+        },
+        "pre_treated": {
+          "description": "Treated group metric before treatment",
+          "title": "Pre Treated",
+          "type": "number"
+        },
+        "post_treated": {
+          "description": "Treated group metric after treatment",
+          "title": "Post Treated",
+          "type": "number"
+        },
+        "pre_periods": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Number of pre-period observations (e.g. days/weeks)",
+          "title": "Pre Periods"
+        },
+        "post_periods": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Number of post-period observations",
+          "title": "Post Periods"
+        },
+        "treatment_observation_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Total underlying observations for treatment",
+          "title": "Treatment Observation Count"
+        },
+        "control_observation_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Total underlying observations for control",
+          "title": "Control Observation Count"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Context string passed through to audit only",
+          "title": "Notes"
+        }
+      },
+      "required": [
+        "pre_control",
+        "post_control",
+        "pre_treated",
+        "post_treated"
+      ],
+      "title": "DIDInput",
+      "type": "object"
+    },
+    "PlanningInput": {
+      "description": "Experiment planning input schema",
+      "properties": {
+        "baseline_conversion_rate": {
+          "description": "Baseline conversion rate (0-1)",
+          "title": "Baseline Conversion Rate",
+          "type": "number"
+        },
+        "mde_pct": {
+          "description": "Minimum detectable effect as percentage (e.g., 5 for 5% lift)",
+          "title": "Mde Pct",
+          "type": "number"
+        },
+        "daily_traffic": {
+          "description": "Daily traffic per arm",
+          "title": "Daily Traffic",
+          "type": "integer"
+        },
+        "confidence_level": {
+          "default": 0.95,
+          "description": "Confidence level",
+          "title": "Confidence Level",
+          "type": "number"
+        },
+        "power": {
+          "default": 0.8,
+          "description": "Statistical power",
+          "title": "Power",
+          "type": "number"
+        },
+        "allocation": {
+          "default": "equal",
+          "enum": [
+            "equal",
+            "custom"
+          ],
+          "title": "Allocation",
+          "type": "string"
+        },
+        "allocation_ratio": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "e.g. 0.5/0.5",
+          "title": "Allocation Ratio"
+        }
+      },
+      "required": [
+        "baseline_conversion_rate",
+        "mde_pct",
+        "daily_traffic"
+      ],
+      "title": "PlanningInput",
+      "type": "object"
+    },
+    "ABTestOutput": {
+      "$defs": {
+        "Recommendation": {
+          "description": "Decision recommendation output",
+          "properties": {
+            "decision": {
+              "description": "Recommended action",
+              "enum": [
+                "ship",
+                "keep_running",
+                "reject",
+                "escalate"
+              ],
+              "title": "Decision",
+              "type": "string"
+            },
+            "confidence": {
+              "description": "Confidence level",
+              "enum": [
+                "high",
+                "medium",
+                "low"
+              ],
+              "title": "Confidence",
+              "type": "string"
+            },
+            "summary": {
+              "description": "Human-readable summary",
+              "title": "Summary",
+              "type": "string"
+            },
+            "primary_metricLift": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Estimated lift percentage",
+              "title": "Primary Metriclift"
+            },
+            "p_value": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "P-value if applicable",
+              "title": "P Value"
+            },
+            "warning": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Warning if evidence is weak",
+              "title": "Warning"
+            }
+          },
+          "required": [
+            "decision",
+            "confidence",
+            "summary"
+          ],
+          "title": "Recommendation",
+          "type": "object"
+        },
+        "SequentialSummary": {
+          "description": "Summary of sequential early stopping evaluation",
+          "properties": {
+            "min_runtime_days": {
+              "title": "Min Runtime Days",
+              "type": "integer"
+            },
+            "observed_runtime_days": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Observed Runtime Days"
+            },
+            "min_sample_per_arm": {
+              "title": "Min Sample Per Arm",
+              "type": "integer"
+            },
+            "observed_sample_per_arm": {
+              "title": "Observed Sample Per Arm",
+              "type": "integer"
+            },
+            "early_stop_p_threshold": {
+              "title": "Early Stop P Threshold",
+              "type": "number"
+            },
+            "max_runtime_days": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Max Runtime Days"
+            },
+            "reason": {
+              "enum": [
+                "conditions_not_met",
+                "p_below_threshold",
+                "max_runtime_exceeded",
+                "no_early_stop"
+              ],
+              "title": "Reason",
+              "type": "string"
+            }
+          },
+          "required": [
+            "min_runtime_days",
+            "min_sample_per_arm",
+            "observed_sample_per_arm",
+            "early_stop_p_threshold",
+            "reason"
+          ],
+          "title": "SequentialSummary",
+          "type": "object"
+        },
+        "TrafficStats": {
+          "description": "Traffic/observation size summary",
+          "properties": {
+            "control_size": {
+              "title": "Control Size",
+              "type": "integer"
+            },
+            "variant_size": {
+              "title": "Variant Size",
+              "type": "integer"
+            },
+            "total_size": {
+              "title": "Total Size",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "control_size",
+            "variant_size",
+            "total_size"
+          ],
+          "title": "TrafficStats",
+          "type": "object"
+        },
+        "WarningCode": {
+          "description": "Canonical warning codes for all analysis modules.",
+          "enum": [
+            "LOW_TRAFFIC",
+            "SMALL_EFFECT",
+            "INCONCLUSIVE",
+            "NOT_SIGNIFICANT",
+            "BORDERLINE_P_VALUE",
+            "CORRECTION_CONSERVATIVE",
+            "SEQUENTIAL_EARLY_STOP",
+            "SEQUENTIAL_CONDITIONS_NOT_MET",
+            "MAX_RUNTIME_EXCEEDED",
+            "ZERO_BASELINE",
+            "PARALLEL_TRENDS_VIOLATED",
+            "PARALLEL_TRENDS_WEAK",
+            "BOTH_GROUPS_GREW",
+            "AGGREGATE_DATA",
+            "AGGREGATE_DATA_DID",
+            "SINGLE_PRE_PERIOD",
+            "SMALL_SAMPLE",
+            "IMBALANCED_GROUPS",
+            "LARGE_EFFECT_SMALL_SAMPLE",
+            "PARALLEL_TRENDS_NO_DATA",
+            "BOOTSTRAP_CI_UNRELIABLE",
+            "BOOTSTRAP_CI_WIDE",
+            "SLOW_EXPERIMENT",
+            "INFEASIBLE_EXPERIMENT",
+            "SMALL_MDE",
+            "BASELINE_VERY_LOW",
+            "PRIOR_DOMINATES",
+            "CREDIBLE_INTERVAL_WIDE",
+            "DID_CI_CROSSES_ZERO",
+            "BASELINE_NEAR_ZERO"
+          ],
+          "title": "WarningCode",
+          "type": "string"
+        },
+        "WarningDetail": {
+          "description": "Warning detail",
+          "properties": {
+            "code": {
+              "$ref": "#/$defs/WarningCode",
+              "description": "Warning code"
+            },
+            "message": {
+              "description": "Warning message",
+              "title": "Message",
+              "type": "string"
+            },
+            "severity": {
+              "enum": [
+                "info",
+                "warning",
+                "critical"
+              ],
+              "title": "Severity",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "severity"
+          ],
+          "title": "WarningDetail",
+          "type": "object"
+        }
+      },
+      "description": "A/B test output schema",
+      "properties": {
+        "schema_version": {
+          "description": "Schema contract version for this output",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "mode": {
+          "const": "ab_test",
+          "default": "ab_test",
+          "title": "Mode",
+          "type": "string"
+        },
+        "recommendation": {
+          "$ref": "#/$defs/Recommendation"
+        },
+        "statistics": {
+          "additionalProperties": true,
+          "description": "Computed statistics",
+          "title": "Statistics",
+          "type": "object"
+        },
+        "traffic_stats": {
+          "$ref": "#/$defs/TrafficStats"
+        },
+        "warnings": {
+          "items": {
+            "$ref": "#/$defs/WarningDetail"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "next_steps": {
+          "description": "Suggested next steps",
+          "items": {
+            "type": "string"
+          },
+          "title": "Next Steps",
+          "type": "array"
+        },
+        "next_analysis_suggestion": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Suggested next analysis command if result is inconclusive",
+          "title": "Next Analysis Suggestion"
+        },
+        "audit": {
+          "additionalProperties": true,
+          "description": "Audit record",
+          "title": "Audit",
+          "type": "object"
+        },
+        "inputs": {
+          "additionalProperties": true,
+          "description": "Original inputs for audit",
+          "title": "Inputs",
+          "type": "object"
+        },
+        "sequential_reviewed": {
+          "default": false,
+          "description": "Whether sequential logic was evaluated",
+          "title": "Sequential Reviewed",
+          "type": "boolean"
+        },
+        "early_stop_applied": {
+          "default": false,
+          "description": "Whether early stop was triggered",
+          "title": "Early Stop Applied",
+          "type": "boolean"
+        },
+        "sequential_summary": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SequentialSummary"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Sequential evaluation details"
+        }
+      },
+      "required": [
+        "recommendation",
+        "statistics",
+        "traffic_stats",
+        "next_steps",
+        "audit",
+        "inputs"
+      ],
+      "title": "ABTestOutput",
+      "type": "object"
+    },
+    "DIDOutput": {
+      "$defs": {
+        "DIDDiagnostics": {
+          "description": "DiD setup quality and fragility diagnostics",
+          "properties": {
+            "pre_periods": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Pre Periods"
+            },
+            "post_periods": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Post Periods"
+            },
+            "treatment_observation_count": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Treatment Observation Count"
+            },
+            "control_observation_count": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Control Observation Count"
+            },
+            "parallel_trends_evidence": {
+              "default": "none",
+              "enum": [
+                "none",
+                "weak",
+                "moderate",
+                "strong"
+              ],
+              "title": "Parallel Trends Evidence",
+              "type": "string"
+            },
+            "fragility_flags": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Fragility Flags",
+              "type": "array"
+            },
+            "recommended_caution_level": {
+              "default": "low",
+              "enum": [
+                "low",
+                "medium",
+                "high"
+              ],
+              "title": "Recommended Caution Level",
+              "type": "string"
+            }
+          },
+          "title": "DIDDiagnostics",
+          "type": "object"
+        },
+        "Recommendation": {
+          "description": "Decision recommendation output",
+          "properties": {
+            "decision": {
+              "description": "Recommended action",
+              "enum": [
+                "ship",
+                "keep_running",
+                "reject",
+                "escalate"
+              ],
+              "title": "Decision",
+              "type": "string"
+            },
+            "confidence": {
+              "description": "Confidence level",
+              "enum": [
+                "high",
+                "medium",
+                "low"
+              ],
+              "title": "Confidence",
+              "type": "string"
+            },
+            "summary": {
+              "description": "Human-readable summary",
+              "title": "Summary",
+              "type": "string"
+            },
+            "primary_metricLift": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Estimated lift percentage",
+              "title": "Primary Metriclift"
+            },
+            "p_value": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "P-value if applicable",
+              "title": "P Value"
+            },
+            "warning": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Warning if evidence is weak",
+              "title": "Warning"
+            }
+          },
+          "required": [
+            "decision",
+            "confidence",
+            "summary"
+          ],
+          "title": "Recommendation",
+          "type": "object"
+        },
+        "WarningCode": {
+          "description": "Canonical warning codes for all analysis modules.",
+          "enum": [
+            "LOW_TRAFFIC",
+            "SMALL_EFFECT",
+            "INCONCLUSIVE",
+            "NOT_SIGNIFICANT",
+            "BORDERLINE_P_VALUE",
+            "CORRECTION_CONSERVATIVE",
+            "SEQUENTIAL_EARLY_STOP",
+            "SEQUENTIAL_CONDITIONS_NOT_MET",
+            "MAX_RUNTIME_EXCEEDED",
+            "ZERO_BASELINE",
+            "PARALLEL_TRENDS_VIOLATED",
+            "PARALLEL_TRENDS_WEAK",
+            "BOTH_GROUPS_GREW",
+            "AGGREGATE_DATA",
+            "AGGREGATE_DATA_DID",
+            "SINGLE_PRE_PERIOD",
+            "SMALL_SAMPLE",
+            "IMBALANCED_GROUPS",
+            "LARGE_EFFECT_SMALL_SAMPLE",
+            "PARALLEL_TRENDS_NO_DATA",
+            "BOOTSTRAP_CI_UNRELIABLE",
+            "BOOTSTRAP_CI_WIDE",
+            "SLOW_EXPERIMENT",
+            "INFEASIBLE_EXPERIMENT",
+            "SMALL_MDE",
+            "BASELINE_VERY_LOW",
+            "PRIOR_DOMINATES",
+            "CREDIBLE_INTERVAL_WIDE",
+            "DID_CI_CROSSES_ZERO",
+            "BASELINE_NEAR_ZERO"
+          ],
+          "title": "WarningCode",
+          "type": "string"
+        },
+        "WarningDetail": {
+          "description": "Warning detail",
+          "properties": {
+            "code": {
+              "$ref": "#/$defs/WarningCode",
+              "description": "Warning code"
+            },
+            "message": {
+              "description": "Warning message",
+              "title": "Message",
+              "type": "string"
+            },
+            "severity": {
+              "enum": [
+                "info",
+                "warning",
+                "critical"
+              ],
+              "title": "Severity",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "severity"
+          ],
+          "title": "WarningDetail",
+          "type": "object"
+        }
+      },
+      "description": "DiD output schema",
+      "properties": {
+        "schema_version": {
+          "description": "Schema contract version for this output",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "mode": {
+          "const": "did",
+          "default": "did",
+          "title": "Mode",
+          "type": "string"
+        },
+        "recommendation": {
+          "$ref": "#/$defs/Recommendation"
+        },
+        "statistics": {
+          "additionalProperties": true,
+          "description": "Computed DiD statistics",
+          "title": "Statistics",
+          "type": "object"
+        },
+        "traffic_stats": {
+          "additionalProperties": true,
+          "description": "Observation size info",
+          "title": "Traffic Stats",
+          "type": "object"
+        },
+        "warnings": {
+          "items": {
+            "$ref": "#/$defs/WarningDetail"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "next_steps": {
+          "description": "Suggested next steps",
+          "items": {
+            "type": "string"
+          },
+          "title": "Next Steps",
+          "type": "array"
+        },
+        "audit": {
+          "additionalProperties": true,
+          "description": "Audit record",
+          "title": "Audit",
+          "type": "object"
+        },
+        "inputs": {
+          "additionalProperties": true,
+          "description": "Original inputs for audit",
+          "title": "Inputs",
+          "type": "object"
+        },
+        "assumptions": {
+          "description": "DiD assumptions that must hold",
+          "items": {
+            "type": "string"
+          },
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "did_diagnostics": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DIDDiagnostics"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "DiD setup quality diagnostics"
+        },
+        "recommended_next_action": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Suggested next action based on diagnostics",
+          "title": "Recommended Next Action"
+        },
+        "explanation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Plain-language explanation of result and caution level",
+          "title": "Explanation"
+        },
+        "next_analysis_suggestion": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Suggested next analysis to run when result is inconclusive or caution is high",
+          "title": "Next Analysis Suggestion"
+        }
+      },
+      "required": [
+        "recommendation",
+        "statistics",
+        "traffic_stats",
+        "next_steps",
+        "audit",
+        "inputs",
+        "assumptions"
+      ],
+      "title": "DIDOutput",
+      "type": "object"
+    },
+    "PlanningOutput": {
+      "$defs": {
+        "Recommendation": {
+          "description": "Decision recommendation output",
+          "properties": {
+            "decision": {
+              "description": "Recommended action",
+              "enum": [
+                "ship",
+                "keep_running",
+                "reject",
+                "escalate"
+              ],
+              "title": "Decision",
+              "type": "string"
+            },
+            "confidence": {
+              "description": "Confidence level",
+              "enum": [
+                "high",
+                "medium",
+                "low"
+              ],
+              "title": "Confidence",
+              "type": "string"
+            },
+            "summary": {
+              "description": "Human-readable summary",
+              "title": "Summary",
+              "type": "string"
+            },
+            "primary_metricLift": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Estimated lift percentage",
+              "title": "Primary Metriclift"
+            },
+            "p_value": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "P-value if applicable",
+              "title": "P Value"
+            },
+            "warning": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Warning if evidence is weak",
+              "title": "Warning"
+            }
+          },
+          "required": [
+            "decision",
+            "confidence",
+            "summary"
+          ],
+          "title": "Recommendation",
+          "type": "object"
+        },
+        "WarningCode": {
+          "description": "Canonical warning codes for all analysis modules.",
+          "enum": [
+            "LOW_TRAFFIC",
+            "SMALL_EFFECT",
+            "INCONCLUSIVE",
+            "NOT_SIGNIFICANT",
+            "BORDERLINE_P_VALUE",
+            "CORRECTION_CONSERVATIVE",
+            "SEQUENTIAL_EARLY_STOP",
+            "SEQUENTIAL_CONDITIONS_NOT_MET",
+            "MAX_RUNTIME_EXCEEDED",
+            "ZERO_BASELINE",
+            "PARALLEL_TRENDS_VIOLATED",
+            "PARALLEL_TRENDS_WEAK",
+            "BOTH_GROUPS_GREW",
+            "AGGREGATE_DATA",
+            "AGGREGATE_DATA_DID",
+            "SINGLE_PRE_PERIOD",
+            "SMALL_SAMPLE",
+            "IMBALANCED_GROUPS",
+            "LARGE_EFFECT_SMALL_SAMPLE",
+            "PARALLEL_TRENDS_NO_DATA",
+            "BOOTSTRAP_CI_UNRELIABLE",
+            "BOOTSTRAP_CI_WIDE",
+            "SLOW_EXPERIMENT",
+            "INFEASIBLE_EXPERIMENT",
+            "SMALL_MDE",
+            "BASELINE_VERY_LOW",
+            "PRIOR_DOMINATES",
+            "CREDIBLE_INTERVAL_WIDE",
+            "DID_CI_CROSSES_ZERO",
+            "BASELINE_NEAR_ZERO"
+          ],
+          "title": "WarningCode",
+          "type": "string"
+        },
+        "WarningDetail": {
+          "description": "Warning detail",
+          "properties": {
+            "code": {
+              "$ref": "#/$defs/WarningCode",
+              "description": "Warning code"
+            },
+            "message": {
+              "description": "Warning message",
+              "title": "Message",
+              "type": "string"
+            },
+            "severity": {
+              "enum": [
+                "info",
+                "warning",
+                "critical"
+              ],
+              "title": "Severity",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "severity"
+          ],
+          "title": "WarningDetail",
+          "type": "object"
+        }
+      },
+      "description": "Experiment planning output schema",
+      "properties": {
+        "schema_version": {
+          "description": "Schema contract version for this output",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "mode": {
+          "const": "planning",
+          "default": "planning",
+          "title": "Mode",
+          "type": "string"
+        },
+        "recommendation": {
+          "$ref": "#/$defs/Recommendation"
+        },
+        "planning": {
+          "additionalProperties": true,
+          "description": "Planning computed values",
+          "title": "Planning",
+          "type": "object"
+        },
+        "warnings": {
+          "items": {
+            "$ref": "#/$defs/WarningDetail"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "inputs": {
+          "additionalProperties": true,
+          "title": "Inputs",
+          "type": "object"
+        }
+      },
+      "required": [
+        "recommendation",
+        "planning",
+        "inputs"
+      ],
+      "title": "PlanningOutput",
+      "type": "object"
+    },
+    "Recommendation": {
+      "description": "Decision recommendation output",
+      "properties": {
+        "decision": {
+          "description": "Recommended action",
+          "enum": [
+            "ship",
+            "keep_running",
+            "reject",
+            "escalate"
+          ],
+          "title": "Decision",
+          "type": "string"
+        },
+        "confidence": {
+          "description": "Confidence level",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ],
+          "title": "Confidence",
+          "type": "string"
+        },
+        "summary": {
+          "description": "Human-readable summary",
+          "title": "Summary",
+          "type": "string"
+        },
+        "primary_metricLift": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Estimated lift percentage",
+          "title": "Primary Metriclift"
+        },
+        "p_value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "P-value if applicable",
+          "title": "P Value"
+        },
+        "warning": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Warning if evidence is weak",
+          "title": "Warning"
+        }
+      },
+      "required": [
+        "decision",
+        "confidence",
+        "summary"
+      ],
+      "title": "Recommendation",
+      "type": "object"
+    },
+    "WarningDetail": {
+      "$defs": {
+        "WarningCode": {
+          "description": "Canonical warning codes for all analysis modules.",
+          "enum": [
+            "LOW_TRAFFIC",
+            "SMALL_EFFECT",
+            "INCONCLUSIVE",
+            "NOT_SIGNIFICANT",
+            "BORDERLINE_P_VALUE",
+            "CORRECTION_CONSERVATIVE",
+            "SEQUENTIAL_EARLY_STOP",
+            "SEQUENTIAL_CONDITIONS_NOT_MET",
+            "MAX_RUNTIME_EXCEEDED",
+            "ZERO_BASELINE",
+            "PARALLEL_TRENDS_VIOLATED",
+            "PARALLEL_TRENDS_WEAK",
+            "BOTH_GROUPS_GREW",
+            "AGGREGATE_DATA",
+            "AGGREGATE_DATA_DID",
+            "SINGLE_PRE_PERIOD",
+            "SMALL_SAMPLE",
+            "IMBALANCED_GROUPS",
+            "LARGE_EFFECT_SMALL_SAMPLE",
+            "PARALLEL_TRENDS_NO_DATA",
+            "BOOTSTRAP_CI_UNRELIABLE",
+            "BOOTSTRAP_CI_WIDE",
+            "SLOW_EXPERIMENT",
+            "INFEASIBLE_EXPERIMENT",
+            "SMALL_MDE",
+            "BASELINE_VERY_LOW",
+            "PRIOR_DOMINATES",
+            "CREDIBLE_INTERVAL_WIDE",
+            "DID_CI_CROSSES_ZERO",
+            "BASELINE_NEAR_ZERO"
+          ],
+          "title": "WarningCode",
+          "type": "string"
+        }
+      },
+      "description": "Warning detail",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/WarningCode",
+          "description": "Warning code"
+        },
+        "message": {
+          "description": "Warning message",
+          "title": "Message",
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "info",
+            "warning",
+            "critical"
+          ],
+          "title": "Severity",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "severity"
+      ],
+      "title": "WarningDetail",
+      "type": "object"
+    },
+    "TrafficStats": {
+      "description": "Traffic/observation size summary",
+      "properties": {
+        "control_size": {
+          "title": "Control Size",
+          "type": "integer"
+        },
+        "variant_size": {
+          "title": "Variant Size",
+          "type": "integer"
+        },
+        "total_size": {
+          "title": "Total Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "control_size",
+        "variant_size",
+        "total_size"
+      ],
+      "title": "TrafficStats",
+      "type": "object"
+    },
+    "SequentialSummary": {
+      "description": "Summary of sequential early stopping evaluation",
+      "properties": {
+        "min_runtime_days": {
+          "title": "Min Runtime Days",
+          "type": "integer"
+        },
+        "observed_runtime_days": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Observed Runtime Days"
+        },
+        "min_sample_per_arm": {
+          "title": "Min Sample Per Arm",
+          "type": "integer"
+        },
+        "observed_sample_per_arm": {
+          "title": "Observed Sample Per Arm",
+          "type": "integer"
+        },
+        "early_stop_p_threshold": {
+          "title": "Early Stop P Threshold",
+          "type": "number"
+        },
+        "max_runtime_days": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Runtime Days"
+        },
+        "reason": {
+          "enum": [
+            "conditions_not_met",
+            "p_below_threshold",
+            "max_runtime_exceeded",
+            "no_early_stop"
+          ],
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "min_runtime_days",
+        "min_sample_per_arm",
+        "observed_sample_per_arm",
+        "early_stop_p_threshold",
+        "reason"
+      ],
+      "title": "SequentialSummary",
+      "type": "object"
+    },
+    "DIDDiagnostics": {
+      "description": "DiD setup quality and fragility diagnostics",
+      "properties": {
+        "pre_periods": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pre Periods"
+        },
+        "post_periods": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Post Periods"
+        },
+        "treatment_observation_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Treatment Observation Count"
+        },
+        "control_observation_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Control Observation Count"
+        },
+        "parallel_trends_evidence": {
+          "default": "none",
+          "enum": [
+            "none",
+            "weak",
+            "moderate",
+            "strong"
+          ],
+          "title": "Parallel Trends Evidence",
+          "type": "string"
+        },
+        "fragility_flags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Fragility Flags",
+          "type": "array"
+        },
+        "recommended_caution_level": {
+          "default": "low",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Recommended Caution Level",
+          "type": "string"
+        }
+      },
+      "title": "DIDDiagnostics",
+      "type": "object"
+    }
+  }
+}

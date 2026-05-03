@@ -562,6 +562,15 @@ def show_version():
     click.echo(f"agent-causal-decision-tool {_VERSION}")
 
 
+@main.command("schema")
+@click.option("--validate", is_flag=True, help="Validate schema.json is up-to-date with current code")
+def schema_cmd(validate):
+    """Print or validate the schema contract (schema.json)."""
+    import generate_schema
+    schema = generate_schema.generate_schema()
+    click.echo(json.dumps(schema, indent=2))
+
+
 def _print_ab_text(result):
     """Print A/B test in human-readable format"""
     rec = result.recommendation
