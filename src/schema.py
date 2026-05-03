@@ -72,6 +72,8 @@ class DIDInput(BaseModel):
     post_control: float = Field(..., description="Control group metric after treatment")
     pre_treated: float = Field(..., description="Treated group metric before treatment")
     post_treated: float = Field(..., description="Treated group metric after treatment")
+    # Bootstrap CI settings
+    n_bootstrap: int = Field(default=2000, ge=500, le=10000, description="Number of bootstrap resamples for DiD CI (500–10000)")
     # DiD diagnostics metadata
     pre_periods: Optional[int] = Field(default=None, description="Number of pre-period observations (e.g. days/weeks)")
     post_periods: Optional[int] = Field(default=None, description="Number of post-period observations")
@@ -143,7 +145,7 @@ class PlanningInput(BaseModel):
     """Experiment planning input schema"""
     baseline_conversion_rate: float = Field(..., description="Baseline conversion rate (0-1)")
     mde_pct: float = Field(..., description="Minimum detectable effect as percentage (e.g., 5 for 5% lift)")
-    daily_traffic: int = Field(..., description="Daily traffic per arm")
+    daily_traffic: int = Field(default=1000, description="Daily traffic per arm (used for mde_ci_95 calculation)")
     confidence_level: float = Field(default=0.95, description="Confidence level")
     power: float = Field(default=0.8, description="Statistical power")
     allocation: Literal["equal", "custom"] = Field(default="equal")

@@ -328,7 +328,8 @@ def _validate_input(data: dict, mode: str) -> dict:
 @click.option("--post-periods", "post_periods", default=None, type=int, help="Number of post-period observations")
 @click.option("--treatment-obs", "treatment_observation_count", default=None, type=int, help="Total underlying observations for treatment group")
 @click.option("--control-obs", "control_observation_count", default=None, type=int, help="Total underlying observations for control group")
-def did_analysis(pre_control, post_control, pre_treated, post_treated, output_format, auto_save, pre_periods, post_periods, treatment_observation_count, control_observation_count):
+@click.option("--n-bootstrap", "n_bootstrap", default=2000, type=int, help="Number of bootstrap resamples for DiD CI (500–10000, default: 2000)")
+def did_analysis(pre_control, post_control, pre_treated, post_treated, output_format, auto_save, pre_periods, post_periods, treatment_observation_count, control_observation_count, n_bootstrap):
     """Run Difference-in-Differences analysis with robustness diagnostics"""
     input_data = {
         "pre_control": pre_control,
@@ -339,6 +340,7 @@ def did_analysis(pre_control, post_control, pre_treated, post_treated, output_fo
         "post_periods": post_periods,
         "treatment_observation_count": treatment_observation_count,
         "control_observation_count": control_observation_count,
+        "n_bootstrap": n_bootstrap,
     }
     
     result = calculate_did(input_data)
@@ -593,7 +595,8 @@ def _print_ab_text(result):
     click.echo(f"  Variant rate:  {stats['variant_rate']:.4f}")
     click.echo(f"  Relative lift: {stats['relative_lift_pct']:.2f}%")
     click.echo(f"  P-value:       {stats['p_value']:.6f}")
-    click.echo(f"  95% CI:        [{stats['confidence_interval_95'][0]:.4f}, {stats['confidence_interval_95'][1]:.4f}]")
+    click.echo(f"  95% CI (lift):  [{stats['lift_ci_95'][0]:.4f}, {stats['lift_ci_95'][1]:.4f}]")
+    click.echo(f"  Relative CI%:  [{stats['relative_lift_ci_95'][0]:.2f}, {stats['relative_lift_ci_95'][1]:.2f}]")
     
     if result.warnings:
         click.echo()

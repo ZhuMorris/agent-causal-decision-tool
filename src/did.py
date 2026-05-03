@@ -2,6 +2,50 @@
 
 import json
 from schema import DIDInput, DIDOutput, Recommendation, WarningDetail, DIDDiagnostics, WarningCode
+import numpy as np
+
+
+def _bootstrap_did_ci(pre_c: float, post_c: float, pre_t: float, post_t: float,
+                      n: int = 2000, seed: int = None) -> list:
+    """
+    Poisson bootstrap for DiD confidence interval.
+    Uses Poisson resampling on aggregated counts (as floats) to produce a
+    distribution of DiD estimates, then takes 2.5th and 97.5th percentiles.
+
+    Args:
+        pre_c, post_c: Control group pre/post aggregate values
+        pre_t, post_t: Treated group pre/post aggregate values
+        n: Number of bootstrap resamples
+        seed: Optional random seed
+
+    Returns:
+        [ci_lower, ci_upper] — 95% bootstrap CI on did_estimate
+    """
+    rng = np.random.default_rng(seed=seed)
+    estimates = np.empty(n)
+
+    for i in range(n):
+        # Poisson resample of each aggregate count (as float surrogate)
+        bc = rng.poisson(pre_c)
+        ac = rng.poisson(post_c)
+        bt = rng.poisson(pre_t)
+        at = rng.poisson(post_t)
+
+        # Guard against zero pre-period
+        if bc == 0 or bt == 0:
+            estimates[i] = np.nan
+            continue
+
+        control_change = (ac / bc) - 1.0
+        treat_effect = (at / bt) - 1.0
+        estimates[i] = treat_effect - control_change
+
+    # Drop NaN values
+    estimates = estimates[~np.isnan(estimates)]
+    if len(estimates) < 10:
+        return [None, None]
+
+    return [float(np.percentile(estimates, 2.5)), float(np.percentile(estimates, 97.5))]
 
 
 def calculate_did(input_data: dict) -> DIDOutput:
@@ -103,6 +147,51 @@ def calculate_did(input_data: dict) -> DIDOutput:
     # ── Diagnostics ─────────────────────────────────────────────────────────────
     diagnostics = _compute_did_diagnostics(did_input, did_estimate)
 
+    # ── Bootstrap CI (Poisson resampling) ──────────────────────────────────────
+    n_boot = did_input.n_bootstrap
+    did_ci_95 = None
+    ci_method_note = None
+
+    min_count = min(pre_c, post_c, pre_t, post_t)
+    if min_count < 100:
+        warnings.append(WarningDetail(
+            code=WarningCode.BOOTSTRAP_CI_UNRELIABLE,
+            message=f"Bootstrap CI not computed: count {min_count} < 100 (low-count gate). Use with extreme caution.",
+            severity="critical"
+        ))
+        ci_method_note = "bootstrap_ci_unreliable_low_count"
+    elif min_count == 0:
+        warnings.append(WarningDetail(
+            code=WarningCode.ZERO_BASELINE,
+            message="Bootstrap CI not computed: zero count in pre-period.",
+            severity="critical"
+        ))
+        warnings.append(WarningDetail(
+            code=WarningCode.BOOTSTRAP_CI_UNRELIABLE,
+            message="Bootstrap CI is null due to zero baseline.",
+            severity="critical"
+        ))
+        ci_method_note = "bootstrap_ci_unreliable_zero_baseline"
+    else:
+        raw_ci = _bootstrap_did_ci(pre_c, post_c, pre_t, post_t, n=n_boot, seed=42)
+        if raw_ci[0] is not None:
+            did_ci_95 = [round(raw_ci[0], 4), round(raw_ci[1], 4)]
+            ci_range = did_ci_95[1] - did_ci_95[0]
+            # Wide CI: range > 2× abs(did_estimate)
+            if abs(did_estimate) > 0 and ci_range > 2 * abs(did_estimate):
+                warnings.append(WarningDetail(
+                    code=WarningCode.BOOTSTRAP_CI_WIDE,
+                    message=f"Bootstrap CI is wide (range={ci_range:.4f} > 2×|DiD|={abs(did_estimate):.4f}). Point estimate uncertain.",
+                    severity="warning"
+                ))
+            # CI crosses zero
+            if did_ci_95[0] < 0 < did_ci_95[1]:
+                warnings.append(WarningDetail(
+                    code=WarningCode.DID_CI_CROSSES_ZERO,
+                    message=f"Bootstrap CI crosses zero [{did_ci_95[0]:.4f}, {did_ci_95[1]:.4f}]. Effect direction uncertain.",
+                    severity="info"
+                ))
+
     # Emit warnings for diagnostic fragility flags
     _append_diagnostic_warnings(warnings, did_input, diagnostics)
 
@@ -145,7 +234,12 @@ def calculate_did(input_data: dict) -> DIDOutput:
         "control_change": round(control_change, 4),
         "treatment_change": round(treat_effect, 4),
         "control_ratio_post_pre": round(ctrl_ratio, 4),
-        "treatment_ratio_post_pre": round(treat_ratio, 4)
+        "treatment_ratio_post_pre": round(treat_ratio, 4),
+        "did_ci_95": did_ci_95,
+        "did_ci_method": "poisson_bootstrap",
+        "did_ci_n_bootstrap": n_boot if did_ci_95 is not None else None,
+        "did_ci_assumption": "parallel_trends",
+        "did_ci_disclaimer": "CI is valid only when parallel trends holds and aggregates are reliable." if did_ci_95 is None else "Bootstrap CI computed via Poisson resampling on aggregate counts. Valid when parallel trends holds."
     }
 
     # Build audit with diagnostics section

@@ -52,7 +52,16 @@ def calculate_bayes_ab(input_data: dict, n_samples: int = 20000) -> dict:
     lifts = (samples_variant - samples_control) / samples_control * 100
     lift_median = float(np.median(lifts))
     lift_95ci = [float(np.percentile(lifts, 2.5)), float(np.percentile(lifts, 97.5))]
-    
+
+    # Expected absolute lift HDI (2.5th–97.5th percentiles of variant − control)
+    abs_lifts = samples_variant - samples_control
+    expected_lift_hdi_95 = [float(np.percentile(abs_lifts, 2.5)), float(np.percentile(abs_lifts, 97.5))]
+    # Relative: p_c for relative = observed control rate (not posterior)
+    relative_lift_hdi_95 = (
+        [round((expected_lift_hdi_95[0] / p_c) * 100, 4), round((expected_lift_hdi_95[1] / p_c) * 100, 4)]
+        if p_c > 0 else [None, None]
+    )
+
     # Expected values
     expected_control = np.mean(samples_control)
     expected_variant = np.mean(samples_variant)
@@ -142,6 +151,8 @@ def calculate_bayes_ab(input_data: dict, n_samples: int = 20000) -> dict:
         "p_tie": round(p_tie, 6),
         "lift_median_pct": round(lift_median, 4),
         "lift_95ci_pct": [round(lift_95ci[0], 4), round(lift_95ci[1], 4)],
+        "expected_lift_hdi_95": [round(expected_lift_hdi_95[0], 6), round(expected_lift_hdi_95[1], 6)],
+        "relative_lift_hdi_95": relative_lift_hdi_95,
         "monte_carlo_samples": n_samples,
         "prior_used": {"alpha": alpha_prior, "beta": beta_prior, "type": "Jeffreys"}
     }

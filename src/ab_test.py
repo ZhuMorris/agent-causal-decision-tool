@@ -89,6 +89,23 @@ def calculate_ab(input_data: dict) -> ABTestOutput:
     if seq_warning:
         warnings.append(seq_warning)
 
+    # BORDERLINE_P_VALUE: 0.05 ≤ p-value ≤ 0.10 (regardless of early stop)
+    if 0.05 <= p_value <= 0.10:
+        warnings.append(WarningDetail(
+            code=WarningCode.BORDERLINE_P_VALUE,
+            message=f"p-value={p_value:.4f} is borderline (0.05–0.10). Evidence is weak — do not treat as conclusive.",
+            severity="warning"
+        ))
+
+    # CORRECTION_CONSERVATIVE: fires when corrected alpha < 0.01 (Bonferroni for multi-arm)
+    corrected_alpha = alpha  # placeholder; extended in cohort module
+    if corrected_alpha < 0.01:
+        warnings.append(WarningDetail(
+            code=WarningCode.CORRECTION_CONSERVATIVE,
+            message=f"Corrected alpha={corrected_alpha:.4f} < 0.01. Conservative correction applied — may increase false negatives.",
+            severity="info"
+        ))
+
     # ── Base decision logic (unchanged when early stop not applied) ─────────
     # When early_stop_applied=True, the sequential block has already set decision/confidence.
     # Otherwise run normal logic.
@@ -187,7 +204,8 @@ def calculate_ab(input_data: dict) -> ABTestOutput:
         "relative_lift_pct": round(lift, 4),
         "z_score": round(z, 4),
         "p_value": round(p_value, 6),
-        "confidence_interval_95": [round(ci_lower, 6), round(ci_upper, 6)],
+        "lift_ci_95": [round(ci_lower, 6), round(ci_upper, 6)],
+        "relative_lift_ci_95": [round((ci_lower / p_c) * 100, 4) if p_c > 0 else None, round((ci_upper / p_c) * 100, 4) if p_c > 0 else None],
         "cohens_h": round(h, 4),
         "minimum_detectable_effect_pct": round(mde, 4)
     }
