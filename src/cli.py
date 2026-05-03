@@ -10,7 +10,7 @@ from src.ab_test import calculate_ab
 from src.did import calculate_did
 from src.planning import calculate_plan
 from src.bayes import calculate_bayes_ab
-from src.audit import format_audit_text, check_experiment_maturity
+from src.audit import format_audit_text, check_experiment_maturity, audit_ab_test, audit_did
 from src.cohort import cohort_breakdown
 from src import store
 
@@ -480,47 +480,42 @@ def compare(experiment_ids, output_format):
 @click.option("--format", "output_format", type=click.Choice(["text", "json"]), default="text")
 @click.option("--maturity", is_flag=True, help="Include experiment maturity assessment")
 def audit(input_file, output_format, maturity):
-    """Reconstruct and audit a previous decision with detailed decision path"""
+    """Reconstruct and audit a previous decision with detailed decision path.
+
+    Calls audit_ab_test / audit_did rebuilders to reconstruct the audit trail
+    from the saved inputs and result, then uses format_audit_text for text output.
+    This ensures the audit text reflects the actual computation, not a hand-built
+    dict that could drift from the implementation.
+    """
     with open(input_file, "r") as f:
         data = json.load(f)
-    
+
     mode = data.get("mode", "ab_test")
-    
-    if output_format == "json":
-        # Show full audit object with decision path
-        audit_obj = data.get("audit", {})
-        audit_obj["mode"] = mode
-        audit_obj["inputs"] = data.get("inputs", {})
-        
-        if maturity:
-            maturity_result = check_experiment_maturity(audit_obj, data)
-            audit_obj["maturity_assessment"] = maturity_result
-        
-        click.echo(json.dumps(audit_obj, indent=2))
+    inputs = data.get("inputs", {})
+    result = data  # full saved result passed to rebuilders
+
+    # Reconstruct audit via the rebuilder functions (not hand-built)
+    if mode == "ab_test":
+        rebuilt_audit = audit_ab_test(inputs, result)
+    elif mode == "did":
+        rebuilt_audit = audit_did(inputs, result)
     else:
-        # Show human-readable decision path
-        audit_obj = data.get("audit", {})
-        audit_obj["mode"] = mode
-        audit_obj["inputs"] = data.get("inputs", {})
-        
-        text = format_audit_text({
-            "mode": mode,
-            "generated_at": data.get("timestamp", "unknown"),
-            "inputs": data.get("inputs", {}),
-            "decision_path": data.get("audit", {}).get("decision_path", []),
-            "warnings_triggered": data.get("warnings", []),
-            "limitations": data.get("audit", {}).get("limitations", []),
-            "final_decision": {
-                "decision": data.get("recommendation", {}).get("decision", "unknown"),
-                "confidence": data.get("recommendation", {}).get("confidence", "unknown"),
-                "summary": data.get("recommendation", {}).get("summary", "")
-            }
-        })
-        
+        # Fall back to saved audit object if mode not rebuildable
+        rebuilt_audit = data.get("audit", {})
+        rebuilt_audit["mode"] = mode
+        rebuilt_audit["inputs"] = inputs
+
+    if output_format == "json":
         if maturity:
-            maturity_result = check_experiment_maturity(audit_obj, data)
+            maturity_result = check_experiment_maturity(rebuilt_audit, data)
+            rebuilt_audit["maturity_assessment"] = maturity_result
+        click.echo(json.dumps(rebuilt_audit, indent=2))
+    else:
+        # Use format_audit_text with the rebuilt audit (ensures consistency)
+        text = format_audit_text(rebuilt_audit)
+        if maturity:
+            maturity_result = check_experiment_maturity(rebuilt_audit, data)
             text += "\n\n" + _format_maturity_text(maturity_result)
-        
         click.echo(text)
 
 

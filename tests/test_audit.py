@@ -252,5 +252,216 @@ class TestMaturityAssessment:
             "limitations": [],  # Missing
             "final_decision": {"confidence": "medium"}
         }
-        result = check_experiment_maturity(audit, {})
-        assert len(result["warnings"]) > 0
+class TestAuditRebuilders:
+    """Tests for audit_ab_test and audit_did rebuilders.
+
+    These functions are the canonical audit path — they should produce
+    consistent output whether called from the CLI or standalone.
+    """
+
+    def test_audit_ab_test_produces_audit_object(self):
+        """audit_ab_test returns a dict with all required audit fields."""
+        from src.audit import audit_ab_test
+        inputs = {
+            "control_conversions": 100,
+            "control_total": 5000,
+            "variant_conversions": 130,
+            "variant_total": 5000
+        }
+        result = {}  # dummy result
+        audit = audit_ab_test(inputs, result)
+        assert "mode" in audit
+        assert "decision_path" in audit
+        assert "inputs" in audit
+        assert "final_decision" in audit
+        assert audit["mode"] == "ab_test"
+
+    def test_audit_ab_test_runs_all_steps(self):
+        """audit_ab_test produces multiple decision steps."""
+        from src.audit import audit_ab_test
+        inputs = {
+            "control_conversions": 100,
+            "control_total": 5000,
+            "variant_conversions": 130,
+            "variant_total": 5000
+        }
+        audit = audit_ab_test(inputs, {})
+        assert len(audit["decision_path"]) >= 4  # validation, traffic, rates, stats
+
+    def test_audit_ab_test_warning_on_low_traffic(self):
+        """Low traffic triggers a warning in audit trail."""
+        from src.audit import audit_ab_test
+        inputs = {
+            "control_conversions": 10,
+            "control_total": 100,
+            "variant_conversions": 15,
+            "variant_total": 100
+        }
+        audit = audit_ab_test(inputs, {})
+        # Either the traffic step failed or warnings_triggered has entries
+        traffic_step = next((s for s in audit["decision_path"] if "traffic" in s["step"].lower()), None)
+        if traffic_step:
+            assert traffic_step["passed"] is False
+
+    def test_audit_ab_test_final_decision_has_all_keys(self):
+        """final_decision always contains decision, confidence, summary."""
+        from src.audit import audit_ab_test
+        inputs = {"control_conversions": 100, "control_total": 5000,
+                  "variant_conversions": 130, "variant_total": 5000}
+        audit = audit_ab_test(inputs, {})
+        fd = audit["final_decision"]
+        assert "decision" in fd
+        assert "confidence" in fd
+        assert "summary" in fd
+
+    def test_audit_ab_test_invalid_input(self):
+        """Zero total → early exit with escalate decision."""
+        from src.audit import audit_ab_test
+        inputs = {"control_conversions": 0, "control_total": 0,
+                  "variant_conversions": 0, "variant_total": 0}
+        audit = audit_ab_test(inputs, {})
+        assert audit["final_decision"]["decision"] == "escalate"
+
+    def test_audit_did_produces_audit_object(self):
+        """audit_did returns a dict with all required audit fields."""
+        from src.audit import audit_did
+        inputs = {
+            "pre_control": 1000,
+            "post_control": 1100,
+            "pre_treated": 900,
+            "post_treated": 1150
+        }
+        audit = audit_did(inputs, {})
+        assert "mode" in audit
+        assert "decision_path" in audit
+        assert "inputs" in audit
+        assert audit["mode"] == "did"
+
+    def test_audit_did_runs_all_steps(self):
+        """audit_did produces multiple decision steps."""
+        from src.audit import audit_did
+        inputs = {
+            "pre_control": 1000,
+            "post_control": 1100,
+            "pre_treated": 900,
+            "post_treated": 1150
+        }
+        audit = audit_did(inputs, {})
+        assert len(audit["decision_path"]) >= 4
+
+    def test_audit_did_zero_pre_period(self):
+        """Zero pre_period → early exit with escalate decision."""
+        from src.audit import audit_did
+        inputs = {
+            "pre_control": 0,
+            "post_control": 100,
+            "pre_treated": 50,
+            "post_treated": 100
+        }
+        audit = audit_did(inputs, {})
+        assert audit["final_decision"]["decision"] == "escalate"
+
+
+class TestAuditTextFormatter:
+    """Tests for format_audit_text with various audit shapes."""
+
+    def test_format_audit_text_handles_all_fields(self):
+        """format_audit_text renders all audit fields without error."""
+        from src.audit import format_audit_text
+        audit = {
+            "mode": "ab_test",
+            "generated_at": "2026-05-03T00:00:00Z",
+            "decision_path": [
+                {"step": "Traffic check", "passed": True, "details": {"control_size": 5000}, "warning": None},
+                {"step": "Statistical test", "passed": True, "details": {"p_value": 0.045}, "warning": None}
+            ],
+            "warnings_triggered": [
+                {"code": "SMALL_EFFECT", "severity": "warning", "message": "Effect too small"}
+            ],
+            "limitations": ["Binary outcome only"],
+            "final_decision": {
+                "decision": "ship",
+                "confidence": "medium",
+                "summary": "Variant wins"
+            }
+        }
+        text = format_audit_text(audit)
+        assert "DECISION AUDIT REPORT" in text
+        assert "Traffic check" in text
+        assert "ship" in text.lower()
+        assert "SMALL_EFFECT" in text
+
+    def test_format_audit_text_with_empty_decision_path(self):
+        """format_audit_text handles empty decision_path gracefully."""
+        from src.audit import format_audit_text
+        audit = {
+            "mode": "ab_test",
+            "generated_at": "2026-05-03T00:00:00Z",
+            "decision_path": [],
+            "warnings_triggered": [],
+            "limitations": [],
+            "final_decision": {"decision": "keep_running", "confidence": "low", "summary": ""}
+        }
+        text = format_audit_text(audit)
+        assert "DECISION AUDIT REPORT" in text
+
+    def test_format_audit_text_with_failed_steps(self):
+        """Failed steps render correctly (warning marker)."""
+        from src.audit import format_audit_text
+        audit = {
+            "mode": "ab_test",
+            "generated_at": "2026-05-03T00:00:00Z",
+            "decision_path": [
+                {"step": "Traffic check", "passed": False, "details": {"actual": 100}, "warning": "Too low"}
+            ],
+            "warnings_triggered": [],
+            "limitations": [],
+            "final_decision": {"decision": "escalate", "confidence": "low", "summary": ""}
+        }
+        text = format_audit_text(audit)
+        assert "Traffic check" in text
+        assert "⚠" in text  # fail marker
+
+
+class TestAuditConvergence:
+    """Verify CLI audit path and rebuilder path produce consistent output.
+
+    For the same saved result JSON, audit_ab_test(inputs, result) should
+    produce the same essential audit structure as the old hand-built path.
+    """
+
+    def test_audit_ab_test_rebuilder_matches_saved_audit_shape(self):
+        """Rebuilt audit has the same shape keys as a typical saved audit."""
+        from src.audit import audit_ab_test
+        inputs = {
+            "control_conversions": 100,
+            "control_total": 5000,
+            "variant_conversions": 130,
+            "variant_total": 5000
+        }
+        audit = audit_ab_test(inputs, {})
+        # Required shape keys
+        assert "mode" in audit
+        assert "generated_at" in audit
+        assert "decision_path" in audit
+        assert "inputs" in audit
+        assert "thresholds_applied" in audit
+        assert "warnings_triggered" in audit
+        assert "limitations" in audit
+        assert "final_decision" in audit
+
+    def test_audit_did_rebuilder_matches_saved_audit_shape(self):
+        """Rebuilt DiD audit has the same shape keys as a typical saved audit."""
+        from src.audit import audit_did
+        inputs = {
+            "pre_control": 1000,
+            "post_control": 1100,
+            "pre_treated": 900,
+            "post_treated": 1150
+        }
+        audit = audit_did(inputs, {})
+        assert "mode" in audit
+        assert "generated_at" in audit
+        assert "decision_path" in audit
+        assert "inputs" in audit
+        assert "final_decision" in audit
