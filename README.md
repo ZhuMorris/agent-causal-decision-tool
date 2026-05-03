@@ -163,7 +163,7 @@ All commands return structured JSON:
 
 ```json
 {
-  "version": "1.0",
+  "schema_version": "0.8.0",
   "mode": "ab_test",
   "recommendation": {
     "decision": "ship|keep_running|reject|escalate",

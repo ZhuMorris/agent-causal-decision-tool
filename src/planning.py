@@ -2,7 +2,8 @@
 
 import json
 from math import ceil
-from schema import PlanningInput, PlanningOutput, Recommendation, WarningDetail
+from typing import Optional
+from .schema import PlanningInput, PlanningOutput, Recommendation, WarningDetail, WarningCode
 
 
 def calculate_plan(input_data: dict) -> PlanningOutput:
@@ -81,31 +82,47 @@ def calculate_plan(input_data: dict) -> PlanningOutput:
     
     # Warnings
     warnings = []
-    
+
+    # BASELINE_VERY_LOW: baseline rate < 0.005 → warning
+    if p < 0.005:
+        warnings.append(WarningDetail(
+            code=WarningCode.BASELINE_VERY_LOW,
+            message=f"Baseline rate {p:.4f} is very low (<0.005). Estimations may be unreliable.",
+            severity="warning"
+        ))
+
+    # BASELINE_NEAR_ZERO: baseline rate < 0.001 → critical
+    if p < 0.001:
+        warnings.append(WarningDetail(
+            code=WarningCode.BASELINE_NEAR_ZERO,
+            message=f"Baseline rate {p:.6f} is near zero (<0.001). Do not run experiment without careful review.",
+            severity="critical"
+        ))
+
     if daily_traffic < 100:
         warnings.append(WarningDetail(
-            code="LOW_TRAFFIC",
+            code=WarningCode.LOW_TRAFFIC,
             message=f"Daily traffic per arm ({daily_traffic}) is below recommended minimum of 100. Results may be unreliable.",
             severity="warning"
         ))
-    
+
     if estimated_days > 30:
         warnings.append(WarningDetail(
-            code="LONG_EXP",
+            code=WarningCode.SLOW_EXPERIMENT,
             message=f"Estimated duration ({estimated_days:.1f} days) exceeds 30 days. Season effects may confound results.",
             severity="warning"
         ))
-    
+
     if feasibility == "not_recommended":
         warnings.append(WarningDetail(
-            code="NOT_RECOMMENDED",
+            code=WarningCode.INFEASIBLE_EXPERIMENT,
             message="Consider using DiD (Difference-in-Differences) if you cannot wait for enough traffic.",
             severity="warning"
         ))
-    
+
     if mde_fraction < 0.01:
         warnings.append(WarningDetail(
-            code="SMALL_MDE",
+            code=WarningCode.SMALL_MDE,
             message=f"MDE of {mde_pct}% is very small. May require impossibly large sample. Check feasibility.",
             severity="info"
         ))
@@ -135,6 +152,7 @@ def calculate_plan(input_data: dict) -> PlanningOutput:
         "estimated_days": round(estimated_days, 2),
         "feasibility": feasibility,
         "mde_absolute": round(absolute_mde, 6),
+        "mde_ci_95": _compute_mde_ci(p, daily_traffic, mde_fraction, confidence),
         "allocation_used": {"control": r_control, "variant": r_variant},
         "z_alpha": round(z_alpha, 4),
         "z_beta": round(z_beta, 4),
@@ -165,6 +183,33 @@ def _z_from_power(power: float) -> float:
     """Get z-score from power."""
     from scipy import stats
     return stats.norm.ppf(power)
+
+
+def _compute_mde_ci(p: float, n_traffic: int, mde_fraction: float, confidence: float = 0.95) -> Optional[list]:
+    """
+    Compute 95% CI on MDE using normal approximation.
+
+    SE(p) = sqrt(p * (1 - p) / n_traffic)
+    mde_ci_95 = [MDE(p - 1.96*SE(p)), MDE(p + 1.96*SE(p))]
+
+    If --traffic/daily_traffic not supplied (n_traffic is None or <= 0),
+    returns None with an info note (not blocked/warned).
+    """
+    if n_traffic is None or n_traffic <= 0:
+        return None
+
+    from scipy import stats as scipy_stats
+
+    se_p = (p * (1 - p) / n_traffic) ** 0.5
+    z = scipy_stats.norm.ppf(1 - (1 - confidence) / 2)  # ~1.96 for 95%
+
+    lower_rate = max(p - z * se_p, 0.0)
+    upper_rate = min(p + z * se_p, 1.0)
+
+    mde_lower = lower_rate * mde_fraction
+    mde_upper = upper_rate * mde_fraction
+
+    return [round(mde_lower * 100, 4), round(mde_upper * 100, 4)]  # as percentages
 
 
 if __name__ == "__main__":

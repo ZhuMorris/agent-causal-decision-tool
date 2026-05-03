@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-causal-decision-tool"
-version = "0.5.0"
+version = "0.8.0"
 description = "Causal decision and audit tool for AI agents"
 authors = [{name = "Morris"}]
 license = {text = "Apache-2.0"}
@@ -21,6 +21,9 @@ dev = ["pytest>=7.0", "pytest-cov"]
 
 [project.scripts]
 agent-causal = "src.cli:main"
+
+[tool.setuptools]
+packages = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

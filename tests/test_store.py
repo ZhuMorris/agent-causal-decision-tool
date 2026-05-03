@@ -9,7 +9,7 @@ from pathlib import Path
 _temp_db = tempfile.NamedTemporaryFile(delete=False, suffix=".db")
 _temp_db.close()
 
-import store as store_module  # noqa: E402
+from src import store as store_module  # noqa: E402
 
 store_module.DB_PATH = Path(_temp_db.name)
 # Force re-init with temp path

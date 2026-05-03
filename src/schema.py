@@ -1,8 +1,50 @@
 """Input/Output Schema definitions for Agent Causal Decision Tool"""
 
+from importlib.metadata import version as _pkg_version
+
+from enum import Enum
 from pydantic import BaseModel, Field
 from typing import Optional, Literal
 from datetime import datetime
+
+
+class WarningCode(str, Enum):
+    """Canonical warning codes for all analysis modules."""
+    # A/B Test
+    LOW_TRAFFIC = "LOW_TRAFFIC"
+    SMALL_EFFECT = "SMALL_EFFECT"
+    INCONCLUSIVE = "INCONCLUSIVE"
+    NOT_SIGNIFICANT = "NOT_SIGNIFICANT"
+    BORDERLINE_P_VALUE = "BORDERLINE_P_VALUE"
+    CORRECTION_CONSERVATIVE = "CORRECTION_CONSERVATIVE"
+    SEQUENTIAL_EARLY_STOP = "SEQUENTIAL_EARLY_STOP"
+    SEQUENTIAL_CONDITIONS_NOT_MET = "SEQUENTIAL_CONDITIONS_NOT_MET"
+    MAX_RUNTIME_EXCEEDED = "MAX_RUNTIME_EXCEEDED"
+    # DiD
+    ZERO_BASELINE = "ZERO_BASELINE"
+    PARALLEL_TRENDS_VIOLATED = "PARALLEL_TRENDS_VIOLATED"
+    PARALLEL_TRENDS_WEAK = "PARALLEL_TRENDS_WEAK"
+    BOTH_GROUPS_GREW = "BOTH_GROUPS_GREW"
+    AGGREGATE_DATA = "AGGREGATE_DATA"
+    AGGREGATE_DATA_DID = "AGGREGATE_DATA_DID"
+    SINGLE_PRE_PERIOD = "SINGLE_PRE_PERIOD"
+    SMALL_SAMPLE = "SMALL_SAMPLE"
+    IMBALANCED_GROUPS = "IMBALANCED_GROUPS"
+    LARGE_EFFECT_SMALL_SAMPLE = "LARGE_EFFECT_SMALL_SAMPLE"
+    PARALLEL_TRENDS_NO_DATA = "PARALLEL_TRENDS_NO_DATA"
+    BOOTSTRAP_CI_UNRELIABLE = "BOOTSTRAP_CI_UNRELIABLE"
+    BOOTSTRAP_CI_WIDE = "BOOTSTRAP_CI_WIDE"
+    # Planning
+    SLOW_EXPERIMENT = "SLOW_EXPERIMENT"
+    INFEASIBLE_EXPERIMENT = "INFEASIBLE_EXPERIMENT"
+    SMALL_MDE = "SMALL_MDE"
+    BASELINE_VERY_LOW = "BASELINE_VERY_LOW"
+    # Bayesian
+    PRIOR_DOMINATES = "PRIOR_DOMINATES"
+    CREDIBLE_INTERVAL_WIDE = "CREDIBLE_INTERVAL_WIDE"
+    # Q6 / Q16 additions
+    DID_CI_CROSSES_ZERO = "DID_CI_CROSSES_ZERO"
+    BASELINE_NEAR_ZERO = "BASELINE_NEAR_ZERO"
 
 
 class ABTestInput(BaseModel):
@@ -30,6 +72,8 @@ class DIDInput(BaseModel):
     post_control: float = Field(..., description="Control group metric after treatment")
     pre_treated: float = Field(..., description="Treated group metric before treatment")
     post_treated: float = Field(..., description="Treated group metric after treatment")
+    # Bootstrap CI settings
+    n_bootstrap: int = Field(default=2000, ge=500, le=10000, description="Number of bootstrap resamples for DiD CI (500–10000)")
     # DiD diagnostics metadata
     pre_periods: Optional[int] = Field(default=None, description="Number of pre-period observations (e.g. days/weeks)")
     post_periods: Optional[int] = Field(default=None, description="Number of post-period observations")
@@ -53,7 +97,7 @@ class Recommendation(BaseModel):
 
 class WarningDetail(BaseModel):
     """Warning detail"""
-    code: str = Field(..., description="Warning code")
+    code: WarningCode = Field(..., description="Warning code")
     message: str = Field(..., description="Warning message")
     severity: Literal["info", "warning", "critical"]
 
@@ -80,7 +124,7 @@ class SequentialSummary(BaseModel):
 
 class ABTestOutput(BaseModel):
     """A/B test output schema"""
-    version: str = "1.0"
+    schema_version: str = Field(default_factory=lambda: _pkg_version("agent-causal-decision-tool"), description="Schema contract version for this output")
     timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
     mode: Literal["ab_test"] = "ab_test"
     recommendation: Recommendation
@@ -101,7 +145,7 @@ class PlanningInput(BaseModel):
     """Experiment planning input schema"""
     baseline_conversion_rate: float = Field(..., description="Baseline conversion rate (0-1)")
     mde_pct: float = Field(..., description="Minimum detectable effect as percentage (e.g., 5 for 5% lift)")
-    daily_traffic: int = Field(..., description="Daily traffic per arm")
+    daily_traffic: int = Field(default=1000, description="Daily traffic per arm (used for mde_ci_95 calculation)")
     confidence_level: float = Field(default=0.95, description="Confidence level")
     power: float = Field(default=0.8, description="Statistical power")
     allocation: Literal["equal", "custom"] = Field(default="equal")
@@ -110,7 +154,7 @@ class PlanningInput(BaseModel):
 
 class PlanningOutput(BaseModel):
     """Experiment planning output schema"""
-    version: str = "1.0"
+    schema_version: str = Field(default_factory=lambda: _pkg_version("agent-causal-decision-tool"), description="Schema contract version for this output")
     timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
     mode: Literal["planning"] = "planning"
     recommendation: Recommendation
@@ -134,7 +178,7 @@ class DIDDiagnostics(BaseModel):
 
 class DIDOutput(BaseModel):
     """DiD output schema"""
-    version: str = "1.0"
+    schema_version: str = Field(default_factory=lambda: _pkg_version("agent-causal-decision-tool"), description="Schema contract version for this output")
     timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
     mode: Literal["did"] = "did"
     recommendation: Recommendation

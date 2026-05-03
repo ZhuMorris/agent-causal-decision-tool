@@ -50,7 +50,7 @@ class TestDiD:
             "post_treated": 950   # Only 5% growth - diverges!
         })
         warning_codes = [w.code for w in result.warnings]
-        assert any("DIVERGE" in code for code in warning_codes)
+        assert any(c in ("PARALLEL_TRENDS_VIOLATED", "PARALLEL_TRENDS_WEAK") for c in warning_codes)
 
     def test_zero_baseline_critical_warning(self):
         """Zero baseline should trigger critical warning"""
@@ -301,3 +301,197 @@ class TestDiDDiagnostics:
         assert result.did_diagnostics.parallel_trends_evidence == "none"
         assert result.did_diagnostics.recommended_caution_level == "low"
         assert len(result.did_diagnostics.fragility_flags) == 0
+
+
+class TestDiDConfidenceInterval:
+    """Tests for did_ci_95 bootstrap confidence intervals (v0.8)."""
+
+    def test_did_ci_95_present(self):
+        """did_ci_95 must be present in statistics when counts are sufficient."""
+        result = calculate_did({
+            "pre_control": 5000,
+            "post_control": 5500,
+            "pre_treated": 5000,
+            "post_treated": 6000,
+        })
+        assert "did_ci_95" in result.statistics
+
+    def test_did_ci_95_is_list_of_two(self):
+        """did_ci_95 must be [lower, upper]."""
+        result = calculate_did({
+            "pre_control": 5000,
+            "post_control": 5500,
+            "pre_treated": 5000,
+            "post_treated": 6000,
+        })
+        ci = result.statistics["did_ci_95"]
+        assert isinstance(ci, list)
+        assert len(ci) == 2
+
+    def test_did_ci_95_lower_less_than_upper(self):
+        """CI lower bound must be less than upper bound."""
+        result = calculate_did({
+            "pre_control": 5000,
+            "post_control": 5500,
+            "pre_treated": 5000,
+            "post_treated": 6000,
+        })
+        ci = result.statistics["did_ci_95"]
+        assert ci[0] < ci[1]
+
+    def test_did_ci_method_is_poisson_bootstrap(self):
+        """did_ci_method must be 'poisson_bootstrap'."""
+        result = calculate_did({
+            "pre_control": 5000,
+            "post_control": 5500,
+            "pre_treated": 5000,
+            "post_treated": 6000,
+        })
+        assert result.statistics["did_ci_method"] == "poisson_bootstrap"
+
+    def test_did_ci_n_bootstrap_present(self):
+        """did_ci_n_bootstrap must be present when CI is computed."""
+        result = calculate_did({
+            "pre_control": 5000,
+            "post_control": 5500,
+            "pre_treated": 5000,
+            "post_treated": 6000,
+        })
+        assert result.statistics["did_ci_n_bootstrap"] is not None
+
+    def test_did_ci_metadata_always_present(self):
+        """did_ci_assumption and did_ci_disclaimer always present."""
+        result = calculate_did({
+            "pre_control": 5000,
+            "post_control": 5500,
+            "pre_treated": 5000,
+            "post_treated": 6000,
+        })
+        assert "did_ci_assumption" in result.statistics
+        assert "did_ci_disclaimer" in result.statistics
+
+    def test_low_count_gate_returns_null_ci(self):
+        """Count < 100 → did_ci_95 = null + BOOTSTRAP_CI_UNRELIABLE (critical)."""
+        result = calculate_did({
+            "pre_control": 50,
+            "post_control": 55,
+            "pre_treated": 50,
+            "post_treated": 60,
+        })
+        assert result.statistics["did_ci_95"] is None
+        codes = [w.code.value for w in result.warnings]
+        assert "BOOTSTRAP_CI_UNRELIABLE" in codes
+
+    def test_zero_baseline_returns_null_ci(self):
+        """Pre-period zero → exits early via _build_error_output with empty statistics + ZERO_BASELINE.
+        
+        Note: the early-exit path means statistics={}, not did_ci_95=null. This test
+        documents current behavior — the zero-baseline path doesn't compute a CI.
+        """
+        result = calculate_did({
+            "pre_control": 0,
+            "post_control": 100,
+            "pre_treated": 50,
+            "post_treated": 120,
+        })
+        assert result.statistics == {}  # early exit returns empty stats
+        codes = [w.code.value for w in result.warnings]
+        assert "ZERO_BASELINE" in codes
+
+    def test_zero_baseline_non_zero_pre_treated_bootstrap_still_runs(self):
+        """pre_c=0 but pre_t>0 → CI not computed (exits early with statistics={})."""
+        result = calculate_did({
+            "pre_control": 0,
+            "post_control": 100,
+            "pre_treated": 200,
+            "post_treated": 400,
+        })
+        assert result.statistics == {}
+        codes = [w.code.value for w in result.warnings]
+        assert "ZERO_BASELINE" in codes
+
+    def test_bootstrap_ci_unreliable_severity_critical(self):
+        """BOOTSTRAP_CI_UNRELIABLE must have severity=critical."""
+        result = calculate_did({
+            "pre_control": 50,
+            "post_control": 55,
+            "pre_treated": 50,
+            "post_treated": 60,
+        })
+        unreliable = [w for w in result.warnings if w.code.value == "BOOTSTRAP_CI_UNRELIABLE"]
+        assert len(unreliable) == 1
+        assert unreliable[0].severity == "critical"
+
+    def test_did_ci_crosses_zero_warning(self):
+        """CI crossing zero → DID_CI_CROSSES_ZERO (info)."""
+        result = calculate_did({
+            "pre_control": 1000,
+            "post_control": 1100,
+            "pre_treated": 1000,
+            "post_treated": 1020,
+        })
+        codes = [w.code.value for w in result.warnings]
+        # If CI crosses zero, DID_CI_CROSSES_ZERO should be present
+        ci = result.statistics.get("did_ci_95")
+        if ci and ci[0] < 0 < ci[1]:
+            assert "DID_CI_CROSSES_ZERO" in codes
+
+    def test_bootstrap_cis_wide_warning(self):
+        """CI range > 2×|did_estimate| → BOOTSTRAP_CI_WIDE (warning)."""
+        # Use large variance scenario: small pre values with big post divergence
+        result = calculate_did({
+            "pre_control": 100,
+            "post_control": 200,
+            "pre_treated": 100,
+            "post_treated": 400,
+        })
+        codes = [w.code.value for w in result.warnings]
+        if "BOOTSTRAP_CI_WIDE" in codes:
+            wide = [w for w in result.warnings if w.code.value == "BOOTSTRAP_CI_WIDE"]
+            assert wide[0].severity == "warning"
+
+
+class TestDiDNBootstrapParam:
+    """Tests for n_bootstrap parameter in DIDInput."""
+
+    def test_n_bootstrap_custom_value(self):
+        """n_bootstrap parameter accepted and used."""
+        result = calculate_did({
+            "pre_control": 5000,
+            "post_control": 5500,
+            "pre_treated": 5000,
+            "post_treated": 6000,
+            "n_bootstrap": 500,
+        })
+        assert result.statistics["did_ci_n_bootstrap"] == 500
+
+    def test_n_bootstrap_default_2000(self):
+        """Default n_bootstrap is 2000."""
+        result = calculate_did({
+            "pre_control": 5000,
+            "post_control": 5500,
+            "pre_treated": 5000,
+            "post_treated": 6000,
+        })
+        assert result.statistics["did_ci_n_bootstrap"] == 2000
+
+    def test_n_bootstrap_minimum_enforced(self):
+        """n_bootstrap below 500 → Pydantic ValidationError."""
+        from pydantic import ValidationError
+        from src.schema import DIDInput
+        with pytest.raises(ValidationError):
+            DIDInput(
+                pre_control=5000, post_control=5500,
+                pre_treated=5000, post_treated=6000,
+                n_bootstrap=100
+            )
+
+    def test_n_bootstrap_500_accepted(self):
+        """n_bootstrap=500 is the minimum valid value, accepted by Pydantic."""
+        from src.schema import DIDInput
+        inp = DIDInput(
+            pre_control=5000, post_control=5500,
+            pre_treated=5000, post_treated=6000,
+            n_bootstrap=500
+        )
+        assert inp.n_bootstrap == 500

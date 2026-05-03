@@ -5,9 +5,9 @@ from math import sqrt
 from datetime import datetime
 from scipy import stats
 from typing import Optional
-from schema import (
+from .schema import (
     ABTestInput, ABTestOutput, Recommendation, WarningDetail, TrafficStats,
-    SequentialSummary
+    SequentialSummary, WarningCode
 )
 
 
@@ -65,7 +65,7 @@ def calculate_ab(input_data: dict) -> ABTestOutput:
     # Traffic warnings
     if c_total < min_sample or v_total < min_sample:
         warnings.append(WarningDetail(
-            code="LOW_TRAFFIC",
+            code=WarningCode.LOW_TRAFFIC,
             message=f"Traffic too low. Control: {c_total}, Variant: {v_total}. Minimum recommended: {min_sample}",
             severity="warning"
         ))
@@ -73,7 +73,7 @@ def calculate_ab(input_data: dict) -> ABTestOutput:
     # Small effect warning
     if abs(lift) < 1:
         warnings.append(WarningDetail(
-            code="SMALL_EFFECT",
+            code=WarningCode.SMALL_EFFECT,
             message=f"Effect size is very small ({lift:.2f}%). May not be practically significant.",
             severity="info"
         ))
@@ -88,6 +88,23 @@ def calculate_ab(input_data: dict) -> ABTestOutput:
 
     if seq_warning:
         warnings.append(seq_warning)
+
+    # BORDERLINE_P_VALUE: 0.05 ≤ p-value ≤ 0.10 (regardless of early stop)
+    if 0.05 <= p_value <= 0.10:
+        warnings.append(WarningDetail(
+            code=WarningCode.BORDERLINE_P_VALUE,
+            message=f"p-value={p_value:.4f} is borderline (0.05–0.10). Evidence is weak — do not treat as conclusive.",
+            severity="warning"
+        ))
+
+    # CORRECTION_CONSERVATIVE: fires when corrected alpha < 0.01 (Bonferroni for multi-arm)
+    corrected_alpha = alpha  # placeholder; extended in cohort module
+    if corrected_alpha < 0.01:
+        warnings.append(WarningDetail(
+            code=WarningCode.CORRECTION_CONSERVATIVE,
+            message=f"Corrected alpha={corrected_alpha:.4f} < 0.01. Conservative correction applied — may increase false negatives.",
+            severity="info"
+        ))
 
     # ── Base decision logic (unchanged when early stop not applied) ─────────
     # When early_stop_applied=True, the sequential block has already set decision/confidence.
@@ -105,7 +122,7 @@ def calculate_ab(input_data: dict) -> ABTestOutput:
                 decision = "keep_running"
                 confidence = "low"
                 warnings.append(WarningDetail(
-                    code="INCONCLUSIVE",
+                    code=WarningCode.INCONCLUSIVE,
                     message=f"p-value={p_value:.4f} not significant but trending. Keep running.",
                     severity="info"
                 ))
@@ -114,7 +131,7 @@ def calculate_ab(input_data: dict) -> ABTestOutput:
                 decision = "escalate"
                 confidence = "low"
                 warnings.append(WarningDetail(
-                    code="NOT_SIGNIFICANT",
+                    code=WarningCode.NOT_SIGNIFICANT,
                     message=f"p-value={p_value:.4f} far from significant. Consider stopping.",
                     severity="warning"
                 ))
@@ -187,7 +204,8 @@ def calculate_ab(input_data: dict) -> ABTestOutput:
         "relative_lift_pct": round(lift, 4),
         "z_score": round(z, 4),
         "p_value": round(p_value, 6),
-        "confidence_interval_95": [round(ci_lower, 6), round(ci_upper, 6)],
+        "lift_ci_95": [round(ci_lower, 6), round(ci_upper, 6)],
+        "relative_lift_ci_95": [round((ci_lower / p_c) * 100, 4) if p_c > 0 else None, round((ci_upper / p_c) * 100, 4) if p_c > 0 else None],
         "cohens_h": round(h, 4),
         "minimum_detectable_effect_pct": round(mde, 4)
     }
@@ -349,7 +367,7 @@ def _evaluate_sequential(
         if not sample_ok:
             reason_str.append(f"sample {observed_sample_per_arm} < {ab_input.min_sample_per_arm}")
         seq_warning = WarningDetail(
-            code="sequential_conditions_not_met",
+            code=WarningCode.SEQUENTIAL_CONDITIONS_NOT_MET,
             message=f"Sequential conditions not met ({'; '.join(reason_str)}). Normal decision applied.",
             severity="info"
         )
@@ -367,7 +385,7 @@ def _evaluate_sequential(
     # Check max runtime exceeded
     if ab_input.max_runtime_days is not None and observed_runtime_days > ab_input.max_runtime_days:
         seq_warning = WarningDetail(
-            code="max_runtime_exceeded",
+            code=WarningCode.MAX_RUNTIME_EXCEEDED,
             message=f"Max runtime {ab_input.max_runtime_days}d exceeded ({observed_runtime_days:.1f}d) without strong result. Escalating.",
             severity="warning"
         )
@@ -404,7 +422,7 @@ def _evaluate_sequential(
             )
             early_stop_applied = True
             seq_warning = WarningDetail(
-                code="early_stop_applied",
+                code=WarningCode.SEQUENTIAL_EARLY_STOP,
                 message=(
                     f"Early stop applied (p={p_value:.4f} < {ab_input.early_stop_p_threshold}). "
                     f"Decision triggered by p-value threshold."

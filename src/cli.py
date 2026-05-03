@@ -6,13 +6,13 @@ import sys
 from pathlib import Path
 from importlib.metadata import version as _pkg_version, PackageNotFoundError
 
-from ab_test import calculate_ab
-from did import calculate_did
-from planning import calculate_plan
-from bayes import calculate_bayes_ab
-from audit import format_audit_text, check_experiment_maturity
-from cohort import cohort_breakdown
-import store
+from src.ab_test import calculate_ab
+from src.did import calculate_did
+from src.planning import calculate_plan
+from src.bayes import calculate_bayes_ab
+from src.audit import format_audit_text, check_experiment_maturity
+from src.cohort import cohort_breakdown
+from src import store
 
 
 def _get_version():
@@ -30,6 +30,7 @@ def main():
     pass
 
 
+@main.command("bayes")
 @click.option("--control", required=True, help="Control group: conversions/total (e.g., 100/5000)")
 @click.option("--variant", required=True, help="Variant group: conversions/total (e.g., 120/5000)")
 @click.option("--name", default="variant_1", help="Variant name")
@@ -328,7 +329,8 @@ def _validate_input(data: dict, mode: str) -> dict:
 @click.option("--post-periods", "post_periods", default=None, type=int, help="Number of post-period observations")
 @click.option("--treatment-obs", "treatment_observation_count", default=None, type=int, help="Total underlying observations for treatment group")
 @click.option("--control-obs", "control_observation_count", default=None, type=int, help="Total underlying observations for control group")
-def did_analysis(pre_control, post_control, pre_treated, post_treated, output_format, auto_save, pre_periods, post_periods, treatment_observation_count, control_observation_count):
+@click.option("--n-bootstrap", "n_bootstrap", default=2000, type=int, help="Number of bootstrap resamples for DiD CI (500–10000, default: 2000)")
+def did_analysis(pre_control, post_control, pre_treated, post_treated, output_format, auto_save, pre_periods, post_periods, treatment_observation_count, control_observation_count, n_bootstrap):
     """Run Difference-in-Differences analysis with robustness diagnostics"""
     input_data = {
         "pre_control": pre_control,
@@ -339,6 +341,7 @@ def did_analysis(pre_control, post_control, pre_treated, post_treated, output_fo
         "post_periods": post_periods,
         "treatment_observation_count": treatment_observation_count,
         "control_observation_count": control_observation_count,
+        "n_bootstrap": n_bootstrap,
     }
     
     result = calculate_did(input_data)
@@ -562,6 +565,15 @@ def show_version():
     click.echo(f"agent-causal-decision-tool {_VERSION}")
 
 
+@main.command("schema")
+@click.option("--validate", is_flag=True, help="Validate schema.json is up-to-date with current code")
+def schema_cmd(validate):
+    """Print or validate the schema contract (schema.json)."""
+    from src import generate_schema
+    schema = generate_schema.generate_schema()
+    click.echo(json.dumps(schema, indent=2))
+
+
 def _print_ab_text(result):
     """Print A/B test in human-readable format"""
     rec = result.recommendation
@@ -584,7 +596,8 @@ def _print_ab_text(result):
     click.echo(f"  Variant rate:  {stats['variant_rate']:.4f}")
     click.echo(f"  Relative lift: {stats['relative_lift_pct']:.2f}%")
     click.echo(f"  P-value:       {stats['p_value']:.6f}")
-    click.echo(f"  95% CI:        [{stats['confidence_interval_95'][0]:.4f}, {stats['confidence_interval_95'][1]:.4f}]")
+    click.echo(f"  95% CI (lift):  [{stats['lift_ci_95'][0]:.4f}, {stats['lift_ci_95'][1]:.4f}]")
+    click.echo(f"  Relative CI%:  [{stats['relative_lift_ci_95'][0]:.2f}, {stats['relative_lift_ci_95'][1]:.2f}]")
     
     if result.warnings:
         click.echo()

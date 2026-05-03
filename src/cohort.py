@@ -7,7 +7,7 @@ audit chain traceability.
 from datetime import datetime
 from typing import Optional
 
-from utils.stats import (
+from .utils.stats import (
     two_proportion_z_test,
     benjamini_hochberg,
     segment_decision,
@@ -208,6 +208,15 @@ def cohort_breakdown(input_data: dict) -> dict:
             "code": "multiple_comparisons",
             "message": f"{n_segs} segments tested, correction={correction_method}",
             "severity": "info"
+        })
+    if n_segs > 0 and alpha / n_segs < 0.01:
+        all_warnings.append({
+            "code": "CORRECTION_CONSERVATIVE",
+            "message": (
+                f"Effective per-test alpha after correction ({alpha/n_segs:.4f}) is below 0.01 "
+                f"with {n_segs} segments — correction is very conservative; true positives may be suppressed."
+            ),
+            "severity": "warning"
         })
     if interaction_flag:
         all_warnings.append({

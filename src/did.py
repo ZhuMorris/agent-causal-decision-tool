@@ -1,7 +1,51 @@
 """Difference-in-Differences analysis module"""
 
 import json
-from schema import DIDInput, DIDOutput, Recommendation, WarningDetail, DIDDiagnostics
+from .schema import DIDInput, DIDOutput, Recommendation, WarningDetail, DIDDiagnostics, WarningCode
+import numpy as np
+
+
+def _bootstrap_did_ci(pre_c: float, post_c: float, pre_t: float, post_t: float,
+                      n: int = 2000, seed: int = None) -> list:
+    """
+    Poisson bootstrap for DiD confidence interval.
+    Uses Poisson resampling on aggregated counts (as floats) to produce a
+    distribution of DiD estimates, then takes 2.5th and 97.5th percentiles.
+
+    Args:
+        pre_c, post_c: Control group pre/post aggregate values
+        pre_t, post_t: Treated group pre/post aggregate values
+        n: Number of bootstrap resamples
+        seed: Optional random seed
+
+    Returns:
+        [ci_lower, ci_upper] — 95% bootstrap CI on did_estimate
+    """
+    rng = np.random.default_rng(seed=seed)
+    estimates = np.empty(n)
+
+    for i in range(n):
+        # Poisson resample of each aggregate count (as float surrogate)
+        bc = rng.poisson(pre_c)
+        ac = rng.poisson(post_c)
+        bt = rng.poisson(pre_t)
+        at = rng.poisson(post_t)
+
+        # Guard against zero pre-period
+        if bc == 0 or bt == 0:
+            estimates[i] = np.nan
+            continue
+
+        control_change = (ac / bc) - 1.0
+        treat_effect = (at / bt) - 1.0
+        estimates[i] = treat_effect - control_change
+
+    # Drop NaN values
+    estimates = estimates[~np.isnan(estimates)]
+    if len(estimates) < 10:
+        return [None, None]
+
+    return [float(np.percentile(estimates, 2.5)), float(np.percentile(estimates, 97.5))]
 
 
 def calculate_did(input_data: dict) -> DIDOutput:
@@ -32,7 +76,7 @@ def calculate_did(input_data: dict) -> DIDOutput:
     # Basic sanity checks
     if pre_c == 0 or pre_t == 0:
         warnings.append(WarningDetail(
-            code="ZERO_BASELINE",
+            code=WarningCode.ZERO_BASELINE,
             message="Pre-period values cannot be zero for reliable DiD.",
             severity="critical"
         ))
@@ -45,19 +89,19 @@ def calculate_did(input_data: dict) -> DIDOutput:
 
     if ratio_diff > 0.5:
         warnings.append(WarningDetail(
-            code="TRENDS_DIVERGE",
+            code=WarningCode.PARALLEL_TRENDS_VIOLATED,
             message=f"Control and treated groups show very different pre-to-post ratios ({ctrl_ratio:.2f} vs {treat_ratio:.2f}). Parallel trends assumption may not hold.",
             severity="critical"
         ))
     elif ratio_diff > 0.2:
         warnings.append(WarningDetail(
-            code="TRENDS_SLIGHTLY_DIVERGE",
+            code=WarningCode.PARALLEL_TRENDS_WEAK,
             message=f"Ratios diverge somewhat ({ctrl_ratio:.2f} vs {treat_ratio:.2f}). Monitor closely.",
             severity="warning"
         ))
 
     warnings.append(WarningDetail(
-        code="AGGREGATE_DATA",
+        code=WarningCode.AGGREGATE_DATA,
         message="Analysis performed on aggregated data. For robust inference, use individual-level data with clustered SEs.",
         severity="info"
     ))
@@ -68,7 +112,7 @@ def calculate_did(input_data: dict) -> DIDOutput:
         confidence = "low"
         summary = f"DiD estimate is {did_estimate:.2f} ({relative_did:.2f}%), too uncertain to act on."
         warnings.append(WarningDetail(
-            code="SMALL_EFFECT",
+            code=WarningCode.SMALL_EFFECT,
             message=f"Effect size {relative_did:.2f}% is below practical threshold. Escalate for judgment.",
             severity="info"
         ))
@@ -88,7 +132,7 @@ def calculate_did(input_data: dict) -> DIDOutput:
     else:
         if post_t > pre_t and post_c > pre_c:
             warnings.append(WarningDetail(
-                code="AMBIGUOUS",
+                code=WarningCode.BOTH_GROUPS_GREW,
                 message="Both groups grew. Cannot separate treatment effect from time trend.",
                 severity="warning"
             ))
@@ -103,15 +147,63 @@ def calculate_did(input_data: dict) -> DIDOutput:
     # ── Diagnostics ─────────────────────────────────────────────────────────────
     diagnostics = _compute_did_diagnostics(did_input, did_estimate)
 
+    # ── Bootstrap CI (Poisson resampling) ──────────────────────────────────────
+    n_boot = did_input.n_bootstrap
+    did_ci_95 = None
+    ci_method_note = None
+
+    min_count = min(pre_c, post_c, pre_t, post_t)
+    if min_count < 100:
+        warnings.append(WarningDetail(
+            code=WarningCode.BOOTSTRAP_CI_UNRELIABLE,
+            message=f"Bootstrap CI not computed: count {min_count} < 100 (low-count gate). Use with extreme caution.",
+            severity="critical"
+        ))
+        ci_method_note = "bootstrap_ci_unreliable_low_count"
+    elif min_count == 0:
+        warnings.append(WarningDetail(
+            code=WarningCode.ZERO_BASELINE,
+            message="Bootstrap CI not computed: zero count in pre-period.",
+            severity="critical"
+        ))
+        warnings.append(WarningDetail(
+            code=WarningCode.BOOTSTRAP_CI_UNRELIABLE,
+            message="Bootstrap CI is null due to zero baseline.",
+            severity="critical"
+        ))
+        ci_method_note = "bootstrap_ci_unreliable_zero_baseline"
+    else:
+        raw_ci = _bootstrap_did_ci(pre_c, post_c, pre_t, post_t, n=n_boot, seed=42)
+        if raw_ci[0] is not None:
+            did_ci_95 = [round(raw_ci[0], 4), round(raw_ci[1], 4)]
+            ci_range = did_ci_95[1] - did_ci_95[0]
+            # Wide CI: range > 2× abs(did_estimate)
+            if abs(did_estimate) > 0 and ci_range > 2 * abs(did_estimate):
+                warnings.append(WarningDetail(
+                    code=WarningCode.BOOTSTRAP_CI_WIDE,
+                    message=f"Bootstrap CI is wide (range={ci_range:.4f} > 2×|DiD|={abs(did_estimate):.4f}). Point estimate uncertain.",
+                    severity="warning"
+                ))
+            # CI crosses zero
+            if did_ci_95[0] < 0 < did_ci_95[1]:
+                warnings.append(WarningDetail(
+                    code=WarningCode.DID_CI_CROSSES_ZERO,
+                    message=f"Bootstrap CI crosses zero [{did_ci_95[0]:.4f}, {did_ci_95[1]:.4f}]. Effect direction uncertain.",
+                    severity="info"
+                ))
+
+    # Emit warnings for diagnostic fragility flags
+    _append_diagnostic_warnings(warnings, did_input, diagnostics)
+
     # recommended_next_action & explanation based on caution level
     recommended_next_action, explanation = _build_did_narrative(
         decision, relative_did, diagnostics
     )
 
     if diagnostics.recommended_caution_level == "high":
-        if "did_result_should_be_reviewed_by_human" not in [w.code for w in warnings]:
+        if WarningCode.AGGREGATE_DATA_DID not in [w.code for w in warnings]:
             warnings.append(WarningDetail(
-                code="did_result_should_be_reviewed_by_human",
+                code=WarningCode.AGGREGATE_DATA_DID,
                 message="Caution is high; this result should be reviewed by a human. Do not treat this as equivalent to a randomized experiment.",
                 severity="warning"
             ))
@@ -142,7 +234,12 @@ def calculate_did(input_data: dict) -> DIDOutput:
         "control_change": round(control_change, 4),
         "treatment_change": round(treat_effect, 4),
         "control_ratio_post_pre": round(ctrl_ratio, 4),
-        "treatment_ratio_post_pre": round(treat_ratio, 4)
+        "treatment_ratio_post_pre": round(treat_ratio, 4),
+        "did_ci_95": did_ci_95,
+        "did_ci_method": "poisson_bootstrap",
+        "did_ci_n_bootstrap": n_boot if did_ci_95 is not None else None,
+        "did_ci_assumption": "parallel_trends",
+        "did_ci_disclaimer": "CI is valid only when parallel trends holds and aggregates are reliable." if did_ci_95 is None else "Bootstrap CI computed via Poisson resampling on aggregate counts. Valid when parallel trends holds."
     }
 
     # Build audit with diagnostics section
@@ -347,6 +444,54 @@ def _flag_explanation(flag: str) -> str:
         "imbalanced_groups": "treatment/control ratio > 3x or < 1/3x — groups not comparable",
         "large_effect_small_sample": "large effect with small sample — possible confounding",
     }.get(flag, flag)
+
+
+def _append_diagnostic_warnings(warnings: list, did_input: DIDInput, diagnostics: DIDDiagnostics) -> None:
+    """Add WarningDetail entries for each active fragility flag."""
+    existing_codes = {w.code for w in warnings}
+
+    if did_input.pre_periods is None:
+        if WarningCode.PARALLEL_TRENDS_NO_DATA not in existing_codes:
+            warnings.append(WarningDetail(
+                code=WarningCode.PARALLEL_TRENDS_NO_DATA,
+                message="No pre-period count provided; parallel trends cannot be assessed.",
+                severity="info"
+            ))
+    elif did_input.pre_periods <= 1:
+        if WarningCode.SINGLE_PRE_PERIOD not in existing_codes:
+            warnings.append(WarningDetail(
+                code=WarningCode.SINGLE_PRE_PERIOD,
+                message="Only one pre-period — parallel trends assumption cannot be verified.",
+                severity="warning"
+            ))
+
+    t_count = did_input.treatment_observation_count
+    c_count = did_input.control_observation_count
+
+    if (t_count is not None and t_count < 100) or (c_count is not None and c_count < 100):
+        if WarningCode.SMALL_SAMPLE not in existing_codes:
+            warnings.append(WarningDetail(
+                code=WarningCode.SMALL_SAMPLE,
+                message="Observation count < 100 in at least one group — results unreliable.",
+                severity="warning"
+            ))
+
+    if t_count is not None and c_count is not None and c_count > 0:
+        ratio = t_count / c_count
+        if (ratio > 3 or ratio < 1 / 3) and WarningCode.IMBALANCED_GROUPS not in existing_codes:
+            warnings.append(WarningDetail(
+                code=WarningCode.IMBALANCED_GROUPS,
+                message=f"Treatment/control ratio {ratio:.1f}x — groups may not be comparable.",
+                severity="warning"
+            ))
+
+    if "large_effect_small_sample" in diagnostics.fragility_flags:
+        if WarningCode.LARGE_EFFECT_SMALL_SAMPLE not in existing_codes:
+            warnings.append(WarningDetail(
+                code=WarningCode.LARGE_EFFECT_SMALL_SAMPLE,
+                message="Large effect with small sample — possible confounding; treat with caution.",
+                severity="warning"
+            ))
 
 
 def _build_error_output(input_data: dict, error_msg: str, warnings: list) -> DIDOutput:

@@ -89,7 +89,7 @@ class TestPlanning:
         assert "LOW_TRAFFIC" in warning_codes
 
     def test_warns_on_long_experiment(self):
-        """Estimated days > 30 → LONG_EXP warning"""
+        """Estimated days > 30 → SLOW_EXPERIMENT warning"""
         result = calculate_plan({
             "baseline_conversion_rate": 0.02,
             "mde_pct": 10,
@@ -100,10 +100,10 @@ class TestPlanning:
             "allocation_ratio": None
         })
         warning_codes = [w.code for w in result.warnings]
-        assert "LONG_EXP" in warning_codes
+        assert "SLOW_EXPERIMENT" in warning_codes
 
     def test_not_recommended_suggests_did(self):
-        """When not_recommended, should suggest DiD"""
+        """When infeasible, should suggest DiD"""
         result = calculate_plan({
             "baseline_conversion_rate": 0.02,
             "mde_pct": 5,
@@ -114,8 +114,8 @@ class TestPlanning:
             "allocation_ratio": None
         })
         warning_codes = [w.code for w in result.warnings]
-        assert "NOT_RECOMMENDED" in warning_codes
-        did_warning = next((w for w in result.warnings if w.code == "NOT_RECOMMENDED"), None)
+        assert "INFEASIBLE_EXPERIMENT" in warning_codes
+        did_warning = next((w for w in result.warnings if w.code == "INFEASIBLE_EXPERIMENT"), None)
         assert did_warning is not None
         assert "DiD" in did_warning.message
 
@@ -276,3 +276,151 @@ class TestPlanningEdgeCases:
         })
         assert result.planning["required_sample_per_arm"] > 0
         assert result.planning["feasibility"] in ["feasible", "slow", "not_recommended"]
+
+
+class TestMdeConfidenceInterval:
+    """Tests for mde_ci_95 (v0.8 planning feature)."""
+
+    def test_mde_ci_95_present(self):
+        """mde_ci_95 must be present in planning output when daily_traffic provided."""
+        result = calculate_plan({
+            "baseline_conversion_rate": 0.05,
+            "mde_pct": 5,
+            "daily_traffic": 5000,
+        })
+        assert "mde_ci_95" in result.planning
+
+    def test_mde_ci_95_is_list_of_two(self):
+        """mde_ci_95 must be [lower, upper]."""
+        result = calculate_plan({
+            "baseline_conversion_rate": 0.05,
+            "mde_pct": 5,
+            "daily_traffic": 5000,
+        })
+        ci = result.planning["mde_ci_95"]
+        assert isinstance(ci, list)
+        assert len(ci) == 2
+
+    def test_mde_ci_95_lower_less_than_upper(self):
+        """CI lower bound must be less than upper bound."""
+        result = calculate_plan({
+            "baseline_conversion_rate": 0.05,
+            "mde_pct": 5,
+            "daily_traffic": 5000,
+        })
+        ci = result.planning["mde_ci_95"]
+        assert ci[0] < ci[1]
+
+    def test_mde_ci_95_percentage_scale(self):
+        """mde_ci_95 values should be in percentage terms."""
+        result = calculate_plan({
+            "baseline_conversion_rate": 0.05,
+            "mde_pct": 5,
+            "daily_traffic": 5000,
+        })
+        ci = result.planning["mde_ci_95"]
+        assert all(v < 100 for v in ci)  # percentage scale
+
+    def test_mde_ci_95_null_when_no_traffic(self):
+        """mde_ci_95 is null when daily_traffic not provided."""
+        result = calculate_plan({
+            "baseline_conversion_rate": 0.05,
+            "mde_pct": 5,
+            "daily_traffic": 0,
+        })
+        assert result.planning["mde_ci_95"] is None
+
+    def test_mde_ci_95_wider_ci_for_small_traffic(self):
+        """Smaller traffic → wider mde_ci_95."""
+        result_small = calculate_plan({
+            "baseline_conversion_rate": 0.05,
+            "mde_pct": 5,
+            "daily_traffic": 500,
+        })
+        result_large = calculate_plan({
+            "baseline_conversion_rate": 0.05,
+            "mde_pct": 5,
+            "daily_traffic": 50000,
+        })
+        small_range = result_small.planning["mde_ci_95"][1] - result_small.planning["mde_ci_95"][0]
+        large_range = result_large.planning["mde_ci_95"][1] - result_large.planning["mde_ci_95"][0]
+        assert small_range > large_range
+
+
+class TestBaselineWarnings:
+    """Tests for BASELINE_VERY_LOW and BASELINE_NEAR_ZERO (v0.8)."""
+
+    def test_baseline_very_low_warning(self):
+        """Baseline rate < 0.005 → BASELINE_VERY_LOW (warning)."""
+        result = calculate_plan({
+            "baseline_conversion_rate": 0.003,
+            "mde_pct": 10,
+            "daily_traffic": 10000,
+        })
+        codes = [w.code.value for w in result.warnings]
+        assert "BASELINE_VERY_LOW" in codes
+
+    def test_baseline_very_low_severity_warning(self):
+        """BASELINE_VERY_LOW must have severity=warning."""
+        result = calculate_plan({
+            "baseline_conversion_rate": 0.003,
+            "mde_pct": 10,
+            "daily_traffic": 10000,
+        })
+        bl = [w for w in result.warnings if w.code.value == "BASELINE_VERY_LOW"]
+        assert len(bl) == 1
+        assert bl[0].severity == "warning"
+
+    def test_no_baseline_very_low_above_threshold(self):
+        """Baseline rate ≥ 0.005 → no BASELINE_VERY_LOW."""
+        result = calculate_plan({
+            "baseline_conversion_rate": 0.005,
+            "mde_pct": 10,
+            "daily_traffic": 10000,
+        })
+        codes = [w.code.value for w in result.warnings]
+        assert "BASELINE_VERY_LOW" not in codes
+
+    def test_baseline_near_zero_critical(self):
+        """Baseline rate < 0.001 → BASELINE_NEAR_ZERO (critical)."""
+        result = calculate_plan({
+            "baseline_conversion_rate": 0.0005,
+            "mde_pct": 20,
+            "daily_traffic": 10000,
+        })
+        codes = [w.code.value for w in result.warnings]
+        assert "BASELINE_NEAR_ZERO" in codes
+
+    def test_baseline_near_zero_severity_critical(self):
+        """BASELINE_NEAR_ZERO must have severity=critical."""
+        result = calculate_plan({
+            "baseline_conversion_rate": 0.0005,
+            "mde_pct": 20,
+            "daily_traffic": 10000,
+        })
+        bnz = [w for w in result.warnings if w.code.value == "BASELINE_NEAR_ZERO"]
+        assert len(bnz) == 1
+        assert bnz[0].severity == "critical"
+
+    def test_both_baseline_codes_can_fire(self):
+        """Baseline < 0.001 should fire both BASELINE_VERY_LOW and BASELINE_NEAR_ZERO."""
+        result = calculate_plan({
+            "baseline_conversion_rate": 0.0005,
+            "mde_pct": 20,
+            "daily_traffic": 10000,
+        })
+        codes = [w.code.value for w in result.warnings]
+        assert "BASELINE_VERY_LOW" in codes
+        assert "BASELINE_NEAR_ZERO" in codes
+
+    def test_baseline_near_zero_only_at_extreme(self):
+        """Baseline 0.001 ≤ rate < 0.005 → BASELINE_VERY_LOW only (not NEAR_ZERO)."""
+        result = calculate_plan({
+            "baseline_conversion_rate": 0.001,
+            "mde_pct": 20,
+            "daily_traffic": 10000,
+        })
+        codes = [w.code.value for w in result.warnings]
+        assert "BASELINE_NEAR_ZERO" not in codes
+        # BASELINE_VERY_LOW should still fire since 0.001 < 0.005
+        assert "BASELINE_VERY_LOW" in codes
