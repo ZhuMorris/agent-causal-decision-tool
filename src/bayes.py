@@ -1,6 +1,8 @@
 """Bayesian A/B test analysis using Beta-Binomial conjugate model"""
 
 import numpy as np
+from datetime import datetime, timezone
+
 from .schema import (
     ABTestInput, BayesOutput, Recommendation, WarningDetail, TrafficStats,
     PosteriorStats, BayesianStatistics, WarningCode,
@@ -232,7 +234,7 @@ def calculate_bayes_ab(input_data: dict, n_samples: int = 20000) -> BayesOutput:
 
     audit = {
         "experiment_type": "bayesian_ab",
-        "period": {"analyzed_at": "now"},
+        "period": {"analyzed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")},
         "traffic_size": c_total + v_total,
         "computed_stats": ["p_variant_wins", "p_control_wins", "p_tie", "lift_median_pct",
                            "lift_95ci_pct", "expected_lift_hdi_95", "relative_lift_hdi_95"],

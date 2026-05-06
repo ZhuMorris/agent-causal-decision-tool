@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+---
+
+## [0.10.0] — 2026-05-06
+
+### Added
+
+- **Phase I: Agent-Native JSON-RPC API**
+  - `src/api.py` — JSON-RPC 2.0 server with stdio and HTTP transports.
+  - `src/actions.py` — 7 agent actions: `decide_ab`, `decide_rollout`, `plan_test`, `audit_result`, `save_result`, `get_result`, `compare_results`.
+  - `src/errors.py` — Structured error contract with field-level detail.
+  - `src/unified.py` — `AgentDecisionOutput` overlay schema wrapping all internal output models.
+  - `tests/test_api.py` — 28 tests for action dispatch, error contract, stdio transport.
+  - `tests/test_unified.py` — 39 tests for AgentDecisionOutput schema and to_unified().
+  - README and SKILL.md updated with Agent-Native API documentation.
+
+### Technical Notes
+
+- `AgentDecisionOutput.decision` / `confidence` typed as `Literal[...]` for validation.
+- `APIException` (plain Python exception) raised by actions — Pydantic models cannot inherit from Exception in Python 3.9.
+- DiD (`decide_rollout`) passes `n_bootstrap` in input dict, not as separate kwarg.
+
+---
+
 ## [0.9.0] — 2026-05-06
 
 ### Added

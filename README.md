@@ -48,6 +48,116 @@ Use this tool whenever you or your agents have experiment or rollout results and
 - **Decision Audit** — Step-by-step audit trail with experiment maturity scoring
 - **Persistent History** — SQLite-backed experiment history and comparison.
 
+---
+
+## Agent-Native API (Phase IV)
+
+For AI agent integrations, Agent Causal exposes a **JSON-RPC 2.0 API** over both stdio and HTTP.
+
+### Stdio mode (for agent tools like OpenClaw, Codex, Claude Code)
+
+```bash
+python -m src.api stdio
+```
+
+### HTTP mode (for external callers)
+
+```bash
+python -m src.api http --port 8000
+# Or with uvicorn directly:
+uvicorn src.api:app --port 8000
+```
+
+### Actions
+
+| Action | Description |
+|--------|-------------|
+| `decide_ab` | Frequentist A/B test (mode: frequentist) or Bayesian A/B (mode: bayesian) |
+| `decide_rollout` | Difference-in-differences for staged rollouts |
+| `plan_test` | Experiment planning (sample size, MDE, feasibility) |
+| `audit_result` | Full audit of a stored result |
+| `save_result` | Persist a decision result to SQLite history |
+| `get_result` | Retrieve a stored result by ID |
+| `compare_results` | Compare multiple stored experiments |
+
+### Request format
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "decide_ab",
+  "params": {
+    "input": {
+      "control_conversions": 100,
+      "control_total": 5000,
+      "variant_conversions": 130,
+      "variant_total": 5000
+    }
+  },
+  "id": 1
+}
+```
+
+### Response format
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "decision": "ship",
+    "recommended_next_action": "Deploy variant — statistical significance achieved with positive lift.",
+    "selected_method": "ab_test",
+    "selection_reason": "User requested frequentist A/B test via decide_ab action",
+    "confidence": "medium",
+    "effect_summary": "Estimated lift: +30.00% (positive)",
+    "warnings": [],
+    "limitations": ["Binary conversion outcome only", "No multiple testing correction applied"],
+    "audit_summary": "ab_test: Decision",
+    "source_metadata": null,
+    "internal_result": { ... }  # Full ABTestOutput / BayesOutput / DIDOutput / PlanningOutput
+  },
+  "id": 1
+}
+```
+
+### Error response
+
+```json
+{
+  "jsonrpc": "2.0",
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid A/B test inputs",
+    "data": {
+      "details": [{"field": "control_total", "issue": "Input should be greater than or equal to 1"}],
+      "request_id": null
+    }
+  },
+  "id": 1
+}
+```
+
+### Using from Python
+
+```python
+from src.actions import run_action
+
+resp = run_action("decide_ab", {
+    "input": {
+        "control_conversions": 100,
+        "control_total": 5000,
+        "variant_conversions": 130,
+        "variant_total": 5000
+    }
+})
+if "error" in resp:
+    print(f"Error: {resp['error']['message']}")
+else:
+    print(f"Decision: {resp['result']['decision']}")
+```
+
+---
+
 ## Installation
 
 ```bash

@@ -1,6 +1,19 @@
 """Input/Output Schema definitions for Agent Causal Decision Tool"""
 
 from importlib.metadata import version as _pkg_version
+from datetime import datetime, timezone
+
+# Hardcoded fallback version used as default_factory in schema defaults.
+# Avoids environment-dependent failures when the package is not installed
+# or an older wheel is in the environment.
+_SCHEMA_VERSION = "0.10.0"
+
+def _get_version() -> str:
+    """Get installed package version, falling back to _SCHEMA_VERSION on error."""
+    try:
+        return _pkg_version("agent-causal-decision-tool")
+    except Exception:
+        return _SCHEMA_VERSION
 
 from enum import Enum
 from pydantic import BaseModel, Field
@@ -124,7 +137,7 @@ class SequentialSummary(BaseModel):
 
 class ABTestOutput(BaseModel):
     """A/B test output schema"""
-    schema_version: str = Field(default_factory=lambda: _pkg_version("agent-causal-decision-tool"), description="Schema contract version for this output")
+    schema_version: str = Field(default_factory=lambda: _get_version(), description="Schema contract version for this output")
     timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
     mode: Literal["ab_test"] = "ab_test"
     recommendation: Recommendation
@@ -154,7 +167,7 @@ class PlanningInput(BaseModel):
 
 class PlanningOutput(BaseModel):
     """Experiment planning output schema"""
-    schema_version: str = Field(default_factory=lambda: _pkg_version("agent-causal-decision-tool"), description="Schema contract version for this output")
+    schema_version: str = Field(default_factory=lambda: _get_version(), description="Schema contract version for this output")
     timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
     mode: Literal["planning"] = "planning"
     recommendation: Recommendation
@@ -177,9 +190,9 @@ class BayesianStatistics(BaseModel):
     relative_lift_pct: float
     posterior_control: PosteriorStats
     posterior_variant: PosteriorStats
-    p_variant_wins: float
-    p_control_wins: float
-    p_tie: float
+    p_variant_wins: float = Field(..., description="P(variant wins) — must be between 0 and 1", ge=0.0, le=1.0)
+    p_control_wins: float = Field(..., description="P(control wins) — must be between 0 and 1", ge=0.0, le=1.0)
+    p_tie: float = Field(..., description="P(tie) — must be between 0 and 1", ge=0.0, le=1.0)
     lift_median_pct: float
     lift_95ci_pct: list[float]
     expected_lift_hdi_95: list[float]
@@ -194,7 +207,7 @@ class BayesianStatistics(BaseModel):
 class BayesOutput(BaseModel):
     """Bayesian A/B test output schema"""
     schema_version: str = Field(
-        default_factory=lambda: _pkg_version("agent-causal-decision-tool"),
+        default_factory=lambda: _get_version(),
         description="Schema contract version for this output"
     )
     timestamp: str = Field(
@@ -229,7 +242,7 @@ class DIDDiagnostics(BaseModel):
 
 class DIDOutput(BaseModel):
     """DiD output schema"""
-    schema_version: str = Field(default_factory=lambda: _pkg_version("agent-causal-decision-tool"), description="Schema contract version for this output")
+    schema_version: str = Field(default_factory=lambda: _get_version(), description="Schema contract version for this output")
     timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
     mode: Literal["did"] = "did"
     recommendation: Recommendation

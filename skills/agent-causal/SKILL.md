@@ -61,6 +61,86 @@ Use this skill whenever you or your agents have experiment or rollout results an
 - You want to plan an experiment (sample size, MDE, duration) or compare current results to previous experiments.
 - You want to **stop an A/B test early** when evidence is overwhelmingly strong (sequential early stopping), without losing audit integrity.
 
+## Agent-Native Actions (JSON-RPC 2.0)
+
+For AI agent integrations, Agent Causal exposes a JSON-RPC 2.0 API over both stdio and HTTP.
+
+### Stdio mode (for OpenClaw, Codex, Claude Code)
+
+```bash
+python -m src.api stdio
+```
+
+### HTTP mode
+
+```bash
+python -m src.api http --port 8000
+```
+
+### Actions
+
+| Action | Description |
+|--------|-------------|
+| `decide_ab` | Frequentist A/B test (`mode: frequentist`) or Bayesian (`mode: bayesian`) |
+| `decide_rollout` | DiD for staged rollouts / quasi-experiments |
+| `plan_test` | Experiment planning (sample size, MDE, feasibility) |
+| `audit_result` | Full audit of a stored result by ID |
+| `save_result` | Persist a decision result to SQLite history |
+| `get_result` | Retrieve a stored result by ID |
+| `compare_results` | Compare multiple stored experiments |
+
+### Request format
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "decide_ab",
+  "params": {
+    "mode": "frequentist",
+    "input": {
+      "control_conversions": 100,
+      "control_total": 5000,
+      "variant_conversions": 130,
+      "variant_total": 5000
+    }
+  },
+  "id": 1
+}
+```
+
+### Unified response schema
+
+```json
+{
+  "decision": "ship|keep_running|reject|escalate",
+  "recommended_next_action": "Deploy variant — statistical significance achieved with positive lift.",
+  "selected_method": "ab_test|bayesian_ab|did|planning",
+  "selection_reason": "Why this method was chosen",
+  "confidence": "high|medium|low",
+  "effect_summary": "Estimated lift: +30.00% (positive)",
+  "warnings": [{"code": "LOW_TRAFFIC", "message": "...", "severity": "info"}],
+  "limitations": ["No multiple testing correction applied"],
+  "audit_summary": "ab_test: Decision",
+  "source_metadata": {"connector": "langsmith", "dataset_id": "ds-001"},
+  "internal_result": { ... }
+}
+```
+
+### Error format
+
+```json
+{
+  "code": "VALIDATION_ERROR",
+  "message": "Invalid A/B test inputs",
+  "data": {
+    "details": [{"field": "control_total", "issue": "must be >= 1"}],
+    "request_id": null
+  }
+}
+```
+
+---
+
 ## Commands
 
 ### Experiment Planning (ab_plan)
