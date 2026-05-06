@@ -1,53 +1,59 @@
 """Bayesian A/B test analysis using Beta-Binomial conjugate model"""
 
-import json
 import numpy as np
-from .schema import ABTestInput, Recommendation, WarningDetail, WarningCode
+from .schema import (
+    ABTestInput, BayesOutput, Recommendation, WarningDetail, TrafficStats,
+    PosteriorStats, BayesianStatistics, WarningCode,
+)
 
 
-def calculate_bayes_ab(input_data: dict, n_samples: int = 20000) -> dict:
+def calculate_bayes_ab(input_data: dict, n_samples: int = 20000) -> BayesOutput:
     """
     Run Bayesian A/B test analysis.
-    
+
     Uses Beta-Binomial conjugate model:
     - Prior: Beta(alpha_prior, beta_prior) — weak Jeffreys prior by default
     - Posterior after data: Beta(alpha_prior + successes, beta_prior + failures)
     - P(variant > control) computed via Monte Carlo simulation
     """
     ab_input = ABTestInput(**input_data)
-    
+
     # Extract observed data
     c_conv = ab_input.control_conversions
     c_total = ab_input.control_total
     v_conv = ab_input.variant_conversions
     v_total = ab_input.variant_total
-    
+
+    # Guard: totals must be positive (Pydantic ge=1 on ABTestInput is first defense)
+    if c_total < 1 or v_total < 1:
+        raise ValueError(f"control_total and variant_total must be >= 1, got control={c_total}, variant={v_total}")
+
     # Conversion rates
     p_c = c_conv / c_total if c_total > 0 else 0
     p_v = v_conv / v_total if v_total > 0 else 0
-    
+
     # Prior: Jeffrey's prior Beta(0.5, 0.5) — uninformative
     alpha_prior = 0.5
     beta_prior = 0.5
-    
+
     # Posterior parameters
     alpha_c = alpha_prior + c_conv
     beta_c = beta_prior + (c_total - c_conv)
     alpha_v = alpha_prior + v_conv
     beta_v = beta_prior + (v_total - v_conv)
-    
+
     # Monte Carlo simulation: sample from posteriors and compare
     if n_samples < 1:
         raise ValueError(f"n_samples must be >= 1, got {n_samples}")
-    
+
     samples_control = np.random.beta(alpha_c, beta_c, n_samples)
     samples_variant = np.random.beta(alpha_v, beta_v, n_samples)
-    
+
     # Compute probabilities
     p_variant_wins = np.mean(samples_variant > samples_control)
     p_control_wins = np.mean(samples_control > samples_variant)
     p_tie = np.mean(np.abs(samples_variant - samples_control) < 1e-10)
-    
+
     # Relative lift distribution
     lifts = (samples_variant - samples_control) / samples_control * 100
     lift_median = float(np.median(lifts))
@@ -56,23 +62,23 @@ def calculate_bayes_ab(input_data: dict, n_samples: int = 20000) -> dict:
     # Expected absolute lift HDI (2.5th–97.5th percentiles of variant − control)
     abs_lifts = samples_variant - samples_control
     expected_lift_hdi_95 = [float(np.percentile(abs_lifts, 2.5)), float(np.percentile(abs_lifts, 97.5))]
-    # Relative: p_c for relative = observed control rate (not posterior)
+    # Guard: prevent division by zero in relative lift HDI (p_c may be 0)
     relative_lift_hdi_95 = (
         [round((expected_lift_hdi_95[0] / p_c) * 100, 4), round((expected_lift_hdi_95[1] / p_c) * 100, 4)]
-        if p_c > 0 else [None, None]
+        if p_c > 0 else None
     )
 
     # Expected values
     expected_control = np.mean(samples_control)
     expected_variant = np.mean(samples_variant)
-    
+
     # Decision thresholds
     SHIP_THRESHOLD = 0.95
     REJECT_THRESHOLD = 0.05
-    
+
     # Warnings
     warnings = []
-    
+
     min_sample = 500
     if c_total < min_sample or v_total < min_sample:
         warnings.append(WarningDetail(
@@ -104,7 +110,7 @@ def calculate_bayes_ab(input_data: dict, n_samples: int = 20000) -> dict:
                 message=f"Observed lift {lift_pct:.2f}% is very small. May not be practically significant.",
                 severity="info"
             ))
-    
+
     # Compute decision
     if p_variant_wins >= SHIP_THRESHOLD:
         if lift_median > 0:
@@ -128,7 +134,7 @@ def calculate_bayes_ab(input_data: dict, n_samples: int = 20000) -> dict:
         decision = "keep_running"
         confidence = "low"
         summary = f"No clear winner. P(variant wins)={p_variant_wins:.3f}. Keep running to collect more data."
-    
+
     # Recommendation
     recommendation = Recommendation(
         decision=decision,
@@ -138,32 +144,36 @@ def calculate_bayes_ab(input_data: dict, n_samples: int = 20000) -> dict:
         p_value=round(p_variant_wins, 6),
         warning=warnings[0].message if warnings else None
     )
-    
-    # Statistics dict
-    stats_output = {
-        "control_rate_observed": round(p_c, 6),
-        "variant_rate_observed": round(p_v, 6),
-        "relative_lift_pct": round((p_v - p_c) / p_c * 100, 4) if p_c > 0 else 0,
-        "posterior_control": {"alpha": alpha_c, "beta": beta_c, "mean": round(expected_control, 6)},
-        "posterior_variant": {"alpha": alpha_v, "beta": beta_v, "mean": round(expected_variant, 6)},
-        "p_variant_wins": round(p_variant_wins, 6),
-        "p_control_wins": round(p_control_wins, 6),
-        "p_tie": round(p_tie, 6),
-        "lift_median_pct": round(lift_median, 4),
-        "lift_95ci_pct": [round(lift_95ci[0], 4), round(lift_95ci[1], 4)],
-        "expected_lift_hdi_95": [round(expected_lift_hdi_95[0], 6), round(expected_lift_hdi_95[1], 6)],
-        "relative_lift_hdi_95": relative_lift_hdi_95,
-        "monte_carlo_samples": n_samples,
-        "prior_used": {"alpha": alpha_prior, "beta": beta_prior, "type": "Jeffreys"}
-    }
-    
+
+    # Statistics
+    statistics = BayesianStatistics(
+        control_rate_observed=round(p_c, 6),
+        variant_rate_observed=round(p_v, 6),
+        relative_lift_pct=round((p_v - p_c) / p_c * 100, 4) if p_c > 0 else 0,
+        posterior_control=PosteriorStats(
+            alpha=alpha_c, beta=beta_c, mean=round(expected_control, 6)
+        ),
+        posterior_variant=PosteriorStats(
+            alpha=alpha_v, beta=beta_v, mean=round(expected_variant, 6)
+        ),
+        p_variant_wins=round(p_variant_wins, 6),
+        p_control_wins=round(p_control_wins, 6),
+        p_tie=round(p_tie, 6),
+        lift_median_pct=round(lift_median, 4),
+        lift_95ci_pct=[round(lift_95ci[0], 4), round(lift_95ci[1], 4)],
+        expected_lift_hdi_95=[round(expected_lift_hdi_95[0], 6), round(expected_lift_hdi_95[1], 6)],
+        relative_lift_hdi_95=relative_lift_hdi_95,
+        monte_carlo_samples=n_samples,
+        prior_used={"alpha": alpha_prior, "beta": beta_prior, "type": "Jeffreys"}
+    )
+
     # Traffic stats
-    traffic_stats = {
-        "control_size": c_total,
-        "variant_size": v_total,
-        "total_size": c_total + v_total
-    }
-    
+    traffic_stats = TrafficStats(
+        control_size=c_total,
+        variant_size=v_total,
+        total_size=c_total + v_total
+    )
+
     # Next steps
     next_steps_map = {
         "ship": ["Deploy variant", "Monitor for regression"],
@@ -172,7 +182,7 @@ def calculate_bayes_ab(input_data: dict, n_samples: int = 20000) -> dict:
         "escalate": ["Escalate to analyst", "Review for data quality or segment issues"]
     }
     next_steps = next_steps_map[decision]
-    
+
     # Decision path for audit
     decision_path = [
         {
@@ -210,7 +220,7 @@ def calculate_bayes_ab(input_data: dict, n_samples: int = 20000) -> dict:
             "step": "Effect magnitude check",
             "passed": abs(lift_median) >= 1,
             "details": {"median_lift_pct": round(lift_median, 4), "threshold": 1},
-            "warning": f"Small median lift ({round(lift_median,2)}%)" if abs(lift_median) < 1 else None,
+            "warning": f"Small median lift ({round(lift_median, 2)}%)" if abs(lift_median) < 1 else None,
             "severity": "info"
         },
         {
@@ -219,12 +229,13 @@ def calculate_bayes_ab(input_data: dict, n_samples: int = 20000) -> dict:
             "details": {"decision": decision, "confidence": confidence, "reason": summary}
         }
     ]
-    
+
     audit = {
         "experiment_type": "bayesian_ab",
         "period": {"analyzed_at": "now"},
         "traffic_size": c_total + v_total,
-        "computed_stats": list(stats_output.keys()),
+        "computed_stats": ["p_variant_wins", "p_control_wins", "p_tie", "lift_median_pct",
+                           "lift_95ci_pct", "expected_lift_hdi_95", "relative_lift_hdi_95"],
         "method": "Beta-Binomial conjugate model with Monte Carlo simulation",
         "thresholds_applied": {"ship": SHIP_THRESHOLD, "reject": REJECT_THRESHOLD},
         "decision_path": decision_path,
@@ -241,28 +252,13 @@ def calculate_bayes_ab(input_data: dict, n_samples: int = 20000) -> dict:
             "No cluster adjustment for correlated observations"
         ]
     }
-    
-    return {
-        "version": "1.0",
-        "timestamp": _timestamp(),
-        "mode": "bayesian_ab",
-        "recommendation": recommendation.model_dump(),
-        "statistics": stats_output,
-        "traffic_stats": traffic_stats,
-        "warnings": [w.model_dump() for w in warnings],
-        "next_steps": next_steps,
-        "audit": audit,
-        "inputs": input_data
-    }
 
-
-def _timestamp():
-    from datetime import datetime
-    return datetime.utcnow().isoformat() + "Z"
-
-
-if __name__ == "__main__":
-    import sys
-    data = json.load(sys.stdin)
-    result = calculate_bayes_ab(data)
-    print(json.dumps(result, indent=2))
+    return BayesOutput(
+        recommendation=recommendation,
+        statistics=statistics,
+        traffic_stats=traffic_stats,
+        warnings=warnings,
+        next_steps=next_steps,
+        audit=audit,
+        inputs=input_data
+    )

@@ -49,10 +49,10 @@ class WarningCode(str, Enum):
 
 class ABTestInput(BaseModel):
     """A/B test input schema"""
-    control_conversions: int = Field(..., description="Conversions in control group")
-    control_total: int = Field(..., description="Total users in control group")
-    variant_conversions: int = Field(..., description="Conversions in variant group")
-    variant_total: int = Field(..., description="Total users in variant group")
+    control_conversions: int = Field(..., description="Conversions in control group", ge=0)
+    control_total: int = Field(..., description="Total users in control group", ge=1)
+    variant_conversions: int = Field(..., description="Conversions in variant group", ge=0)
+    variant_total: int = Field(..., description="Total users in variant group", ge=1)
     variant_name: Optional[str] = Field(default="variant_1", description="Name of variant")
     # Sequential / early stopping settings
     sequential_enabled: bool = Field(default=False, description="Enable sequential early stopping logic")
@@ -161,6 +161,57 @@ class PlanningOutput(BaseModel):
     planning: dict = Field(..., description="Planning computed values")
     warnings: list[WarningDetail] = Field(default_factory=list)
     inputs: dict
+
+
+class PosteriorStats(BaseModel):
+    """Posterior distribution statistics for Bayesian analysis"""
+    alpha: float
+    beta: float
+    mean: float
+
+
+class BayesianStatistics(BaseModel):
+    """Nested statistics block for Bayesian A/B output"""
+    control_rate_observed: float
+    variant_rate_observed: float
+    relative_lift_pct: float
+    posterior_control: PosteriorStats
+    posterior_variant: PosteriorStats
+    p_variant_wins: float
+    p_control_wins: float
+    p_tie: float
+    lift_median_pct: float
+    lift_95ci_pct: list[float]
+    expected_lift_hdi_95: list[float]
+    relative_lift_hdi_95: Optional[list[float]] = Field(
+        default=None,
+        description="Relative lift 95% HDI (lower, upper). None when control rate is zero."
+    )
+    monte_carlo_samples: int
+    prior_used: dict
+
+
+class BayesOutput(BaseModel):
+    """Bayesian A/B test output schema"""
+    schema_version: str = Field(
+        default_factory=lambda: _pkg_version("agent-causal-decision-tool"),
+        description="Schema contract version for this output"
+    )
+    timestamp: str = Field(
+        default_factory=lambda: datetime.utcnow().isoformat() + "Z"
+    )
+    mode: Literal["bayesian_ab"] = "bayesian_ab"
+    recommendation: Recommendation
+    statistics: BayesianStatistics = Field(..., description="Computed Bayesian statistics")
+    traffic_stats: TrafficStats
+    warnings: list[WarningDetail] = Field(default_factory=list)
+    next_steps: list[str] = Field(..., description="Suggested next steps")
+    next_analysis_suggestion: Optional[dict] = Field(
+        default=None,
+        description="Suggested next analysis command if result is inconclusive"
+    )
+    audit: dict = Field(..., description="Audit record")
+    inputs: dict = Field(..., description="Original inputs for audit")
 
 
 # ─── DiD Diagnostics ─────────────────────────────────────────────────────────

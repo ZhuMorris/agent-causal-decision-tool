@@ -3,10 +3,10 @@
   "schema_coverage": [
     "ab",
     "did",
-    "plan"
+    "plan",
+    "bayes"
   ],
   "schema_coverage_pending": [
-    "bayes",
     "cohort"
   ],
   "severity_contract": {
@@ -20,21 +20,25 @@
       "properties": {
         "control_conversions": {
           "description": "Conversions in control group",
+          "minimum": 0,
           "title": "Control Conversions",
           "type": "integer"
         },
         "control_total": {
           "description": "Total users in control group",
+          "minimum": 1,
           "title": "Control Total",
           "type": "integer"
         },
         "variant_conversions": {
           "description": "Conversions in variant group",
+          "minimum": 0,
           "title": "Variant Conversions",
           "type": "integer"
         },
         "variant_total": {
           "description": "Total users in variant group",
+          "minimum": 1,
           "title": "Variant Total",
           "type": "integer"
         },
@@ -1194,6 +1198,376 @@
       "title": "PlanningOutput",
       "type": "object"
     },
+    "BayesOutput": {
+      "$defs": {
+        "BayesianStatistics": {
+          "description": "Nested statistics block for Bayesian A/B output",
+          "properties": {
+            "control_rate_observed": {
+              "title": "Control Rate Observed",
+              "type": "number"
+            },
+            "variant_rate_observed": {
+              "title": "Variant Rate Observed",
+              "type": "number"
+            },
+            "relative_lift_pct": {
+              "title": "Relative Lift Pct",
+              "type": "number"
+            },
+            "posterior_control": {
+              "$ref": "#/$defs/PosteriorStats"
+            },
+            "posterior_variant": {
+              "$ref": "#/$defs/PosteriorStats"
+            },
+            "p_variant_wins": {
+              "title": "P Variant Wins",
+              "type": "number"
+            },
+            "p_control_wins": {
+              "title": "P Control Wins",
+              "type": "number"
+            },
+            "p_tie": {
+              "title": "P Tie",
+              "type": "number"
+            },
+            "lift_median_pct": {
+              "title": "Lift Median Pct",
+              "type": "number"
+            },
+            "lift_95ci_pct": {
+              "items": {
+                "type": "number"
+              },
+              "title": "Lift 95Ci Pct",
+              "type": "array"
+            },
+            "expected_lift_hdi_95": {
+              "items": {
+                "type": "number"
+              },
+              "title": "Expected Lift Hdi 95",
+              "type": "array"
+            },
+            "relative_lift_hdi_95": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Relative lift 95% HDI (lower, upper). None when control rate is zero.",
+              "title": "Relative Lift Hdi 95"
+            },
+            "monte_carlo_samples": {
+              "title": "Monte Carlo Samples",
+              "type": "integer"
+            },
+            "prior_used": {
+              "additionalProperties": true,
+              "title": "Prior Used",
+              "type": "object"
+            }
+          },
+          "required": [
+            "control_rate_observed",
+            "variant_rate_observed",
+            "relative_lift_pct",
+            "posterior_control",
+            "posterior_variant",
+            "p_variant_wins",
+            "p_control_wins",
+            "p_tie",
+            "lift_median_pct",
+            "lift_95ci_pct",
+            "expected_lift_hdi_95",
+            "monte_carlo_samples",
+            "prior_used"
+          ],
+          "title": "BayesianStatistics",
+          "type": "object"
+        },
+        "PosteriorStats": {
+          "description": "Posterior distribution statistics for Bayesian analysis",
+          "properties": {
+            "alpha": {
+              "title": "Alpha",
+              "type": "number"
+            },
+            "beta": {
+              "title": "Beta",
+              "type": "number"
+            },
+            "mean": {
+              "title": "Mean",
+              "type": "number"
+            }
+          },
+          "required": [
+            "alpha",
+            "beta",
+            "mean"
+          ],
+          "title": "PosteriorStats",
+          "type": "object"
+        },
+        "Recommendation": {
+          "description": "Decision recommendation output",
+          "properties": {
+            "decision": {
+              "description": "Recommended action",
+              "enum": [
+                "ship",
+                "keep_running",
+                "reject",
+                "escalate"
+              ],
+              "title": "Decision",
+              "type": "string"
+            },
+            "confidence": {
+              "description": "Confidence level",
+              "enum": [
+                "high",
+                "medium",
+                "low"
+              ],
+              "title": "Confidence",
+              "type": "string"
+            },
+            "summary": {
+              "description": "Human-readable summary",
+              "title": "Summary",
+              "type": "string"
+            },
+            "primary_metricLift": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Estimated lift percentage",
+              "title": "Primary Metriclift"
+            },
+            "p_value": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "P-value if applicable",
+              "title": "P Value"
+            },
+            "warning": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Warning if evidence is weak",
+              "title": "Warning"
+            }
+          },
+          "required": [
+            "decision",
+            "confidence",
+            "summary"
+          ],
+          "title": "Recommendation",
+          "type": "object"
+        },
+        "TrafficStats": {
+          "description": "Traffic/observation size summary",
+          "properties": {
+            "control_size": {
+              "title": "Control Size",
+              "type": "integer"
+            },
+            "variant_size": {
+              "title": "Variant Size",
+              "type": "integer"
+            },
+            "total_size": {
+              "title": "Total Size",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "control_size",
+            "variant_size",
+            "total_size"
+          ],
+          "title": "TrafficStats",
+          "type": "object"
+        },
+        "WarningCode": {
+          "description": "Canonical warning codes for all analysis modules.",
+          "enum": [
+            "LOW_TRAFFIC",
+            "SMALL_EFFECT",
+            "INCONCLUSIVE",
+            "NOT_SIGNIFICANT",
+            "BORDERLINE_P_VALUE",
+            "CORRECTION_CONSERVATIVE",
+            "SEQUENTIAL_EARLY_STOP",
+            "SEQUENTIAL_CONDITIONS_NOT_MET",
+            "MAX_RUNTIME_EXCEEDED",
+            "ZERO_BASELINE",
+            "PARALLEL_TRENDS_VIOLATED",
+            "PARALLEL_TRENDS_WEAK",
+            "BOTH_GROUPS_GREW",
+            "AGGREGATE_DATA",
+            "AGGREGATE_DATA_DID",
+            "SINGLE_PRE_PERIOD",
+            "SMALL_SAMPLE",
+            "IMBALANCED_GROUPS",
+            "LARGE_EFFECT_SMALL_SAMPLE",
+            "PARALLEL_TRENDS_NO_DATA",
+            "BOOTSTRAP_CI_UNRELIABLE",
+            "BOOTSTRAP_CI_WIDE",
+            "SLOW_EXPERIMENT",
+            "INFEASIBLE_EXPERIMENT",
+            "SMALL_MDE",
+            "BASELINE_VERY_LOW",
+            "PRIOR_DOMINATES",
+            "CREDIBLE_INTERVAL_WIDE",
+            "DID_CI_CROSSES_ZERO",
+            "BASELINE_NEAR_ZERO"
+          ],
+          "title": "WarningCode",
+          "type": "string"
+        },
+        "WarningDetail": {
+          "description": "Warning detail",
+          "properties": {
+            "code": {
+              "$ref": "#/$defs/WarningCode",
+              "description": "Warning code"
+            },
+            "message": {
+              "description": "Warning message",
+              "title": "Message",
+              "type": "string"
+            },
+            "severity": {
+              "enum": [
+                "info",
+                "warning",
+                "critical"
+              ],
+              "title": "Severity",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "severity"
+          ],
+          "title": "WarningDetail",
+          "type": "object"
+        }
+      },
+      "description": "Bayesian A/B test output schema",
+      "properties": {
+        "schema_version": {
+          "description": "Schema contract version for this output",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "mode": {
+          "const": "bayesian_ab",
+          "default": "bayesian_ab",
+          "title": "Mode",
+          "type": "string"
+        },
+        "recommendation": {
+          "$ref": "#/$defs/Recommendation"
+        },
+        "statistics": {
+          "$ref": "#/$defs/BayesianStatistics",
+          "description": "Computed Bayesian statistics"
+        },
+        "traffic_stats": {
+          "$ref": "#/$defs/TrafficStats"
+        },
+        "warnings": {
+          "items": {
+            "$ref": "#/$defs/WarningDetail"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "next_steps": {
+          "description": "Suggested next steps",
+          "items": {
+            "type": "string"
+          },
+          "title": "Next Steps",
+          "type": "array"
+        },
+        "next_analysis_suggestion": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Suggested next analysis command if result is inconclusive",
+          "title": "Next Analysis Suggestion"
+        },
+        "audit": {
+          "additionalProperties": true,
+          "description": "Audit record",
+          "title": "Audit",
+          "type": "object"
+        },
+        "inputs": {
+          "additionalProperties": true,
+          "description": "Original inputs for audit",
+          "title": "Inputs",
+          "type": "object"
+        }
+      },
+      "required": [
+        "recommendation",
+        "statistics",
+        "traffic_stats",
+        "next_steps",
+        "audit",
+        "inputs"
+      ],
+      "title": "BayesOutput",
+      "type": "object"
+    },
     "Recommendation": {
       "description": "Decision recommendation output",
       "properties": {
@@ -1509,6 +1883,151 @@
         }
       },
       "title": "DIDDiagnostics",
+      "type": "object"
+    },
+    "PosteriorStats": {
+      "description": "Posterior distribution statistics for Bayesian analysis",
+      "properties": {
+        "alpha": {
+          "title": "Alpha",
+          "type": "number"
+        },
+        "beta": {
+          "title": "Beta",
+          "type": "number"
+        },
+        "mean": {
+          "title": "Mean",
+          "type": "number"
+        }
+      },
+      "required": [
+        "alpha",
+        "beta",
+        "mean"
+      ],
+      "title": "PosteriorStats",
+      "type": "object"
+    },
+    "BayesianStatistics": {
+      "$defs": {
+        "PosteriorStats": {
+          "description": "Posterior distribution statistics for Bayesian analysis",
+          "properties": {
+            "alpha": {
+              "title": "Alpha",
+              "type": "number"
+            },
+            "beta": {
+              "title": "Beta",
+              "type": "number"
+            },
+            "mean": {
+              "title": "Mean",
+              "type": "number"
+            }
+          },
+          "required": [
+            "alpha",
+            "beta",
+            "mean"
+          ],
+          "title": "PosteriorStats",
+          "type": "object"
+        }
+      },
+      "description": "Nested statistics block for Bayesian A/B output",
+      "properties": {
+        "control_rate_observed": {
+          "title": "Control Rate Observed",
+          "type": "number"
+        },
+        "variant_rate_observed": {
+          "title": "Variant Rate Observed",
+          "type": "number"
+        },
+        "relative_lift_pct": {
+          "title": "Relative Lift Pct",
+          "type": "number"
+        },
+        "posterior_control": {
+          "$ref": "#/$defs/PosteriorStats"
+        },
+        "posterior_variant": {
+          "$ref": "#/$defs/PosteriorStats"
+        },
+        "p_variant_wins": {
+          "title": "P Variant Wins",
+          "type": "number"
+        },
+        "p_control_wins": {
+          "title": "P Control Wins",
+          "type": "number"
+        },
+        "p_tie": {
+          "title": "P Tie",
+          "type": "number"
+        },
+        "lift_median_pct": {
+          "title": "Lift Median Pct",
+          "type": "number"
+        },
+        "lift_95ci_pct": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Lift 95Ci Pct",
+          "type": "array"
+        },
+        "expected_lift_hdi_95": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Expected Lift Hdi 95",
+          "type": "array"
+        },
+        "relative_lift_hdi_95": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Relative lift 95% HDI (lower, upper). None when control rate is zero.",
+          "title": "Relative Lift Hdi 95"
+        },
+        "monte_carlo_samples": {
+          "title": "Monte Carlo Samples",
+          "type": "integer"
+        },
+        "prior_used": {
+          "additionalProperties": true,
+          "title": "Prior Used",
+          "type": "object"
+        }
+      },
+      "required": [
+        "control_rate_observed",
+        "variant_rate_observed",
+        "relative_lift_pct",
+        "posterior_control",
+        "posterior_variant",
+        "p_variant_wins",
+        "p_control_wins",
+        "p_tie",
+        "lift_median_pct",
+        "lift_95ci_pct",
+        "expected_lift_hdi_95",
+        "monte_carlo_samples",
+        "prior_used"
+      ],
+      "title": "BayesianStatistics",
       "type": "object"
     }
   }

@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] — 2026-05-06
+
+### Added
+
+- **Bayesian A/B Output — Pydantic Model**
+  - `BayesOutput`, `BayesianStatistics`, `PosteriorStats` Pydantic models added to `schema.py`.
+  - `calculate_bayes_ab()` now returns `BayesOutput` instead of plain `dict`. Access fields as `.recommendation.decision`, `.statistics.p_variant_wins`, etc.
+  - Serialize with `.model_dump_json(indent=2)` or `.model_dump()`.
+  - `relative_lift_hdi_95` is `None` when control rate is zero (no longer `[None, None]`).
+
+- **Input Validation Hardened on `ABTestInput`**
+  - `control_conversions` / `variant_conversions`: `ge=0` (can be zero, cannot be negative).
+  - `control_total` / `variant_total`: `ge=1` (must be at least 1).
+  - All callers (`calculate_ab`, `calculate_bayes_ab`) now raise `ValueError` early on zero/negative totals before reaching `numpy.random.beta()`.
+
+### Changed
+
+- `bayes` CLI command uses `result.model_dump_json()` instead of `json.dumps()` (Pydantic models are not JSON-serializable via standard library).
+- `_print_bayes_text()` updated to use `.attribute` access (was dict subscript).
+- README Python example updated: `result["recommendation"]["decision"]` → `result.recommendation.decision`.
+- SKILL.md Bayesian example output updated to show full `BayesOutput` schema with all fields, including `schema_version`, `traffic_stats`, `warnings`, `next_steps`, `audit`, `inputs`.
+- `schema.json` `schema_coverage` updated: `bayes` moved from pending → covered.
+
+### Fixed
+
+- Test `test_zero_total` in `test_ab_test.py` corrected to use `control_total: 1` (was 0, now invalid per new `ge=1` constraint).
+
+### Security
+
+- `ABTestInput` now enforces `ge=1` on totals, preventing `ValueError` from `numpy.random.beta()` with non-positive beta parameter.
+
+---
+
 ## [0.8.0] — 2026-05-03
 
 ### Added

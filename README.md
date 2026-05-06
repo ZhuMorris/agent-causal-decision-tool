@@ -243,8 +243,11 @@ result = calculate_bayes_ab({
     "control_conversions": 100, "control_total": 5000,
     "variant_conversions": 130, "variant_total": 5000
 })
-if result["recommendation"]["decision"] == "ship":
+if result.recommendation.decision == "ship":
     pass  # Deploy
+
+# Get JSON for storage or logging
+result_json = result.model_dump_json(indent=2)
 
 # Difference-in-Differences
 result = calculate_did({

@@ -209,25 +209,57 @@ PYTHONPATH=. python3 -m src.cli bayes --control 100/5000 --variant 130/5000
 **Example output:**
 ```json
 {
+  "schema_version": "0.8.0",
+  "timestamp": "2026-05-06T13:00:00.000Z",
   "mode": "bayesian_ab",
   "recommendation": {
     "decision": "ship",
     "confidence": "medium",
-    "summary": "Variant wins with P(better)=0.976. Median lift=30.10%. Ship."
+    "summary": "Variant wins with P(better)=0.976. Median lift=30.10%. Ship.",
+    "primary_metricLift": 30.10,
+    "p_value": 0.9758
   },
   "statistics": {
+    "control_rate_observed": 0.0200,
+    "variant_rate_observed": 0.0260,
+    "relative_lift_pct": 30.00,
+    "posterior_control": {"alpha": 100.5, "beta": 4900.5, "mean": 0.0201},
+    "posterior_variant": {"alpha": 130.5, "beta": 4870.5, "mean": 0.0261},
     "p_variant_wins": 0.9758,
+    "p_control_wins": 0.0239,
+    "p_tie": 0.0003,
     "lift_median_pct": 30.10,
     "lift_95ci_pct": [0.20, 69.15],
-    "posterior_control": {"alpha": 100.5, "beta": 4900.5, "mean": 0.0201},
-    "posterior_variant": {"alpha": 130.5, "beta": 4870.5, "mean": 0.0261}
+    "expected_lift_hdi_95": [0.0004, 0.0014],
+    "relative_lift_hdi_95": [2.00, 70.00],
+    "monte_carlo_samples": 20000,
+    "prior_used": {"alpha": 0.5, "beta": 0.5, "type": "Jeffreys"}
+  },
+  "traffic_stats": {
+    "control_size": 5000,
+    "variant_size": 5000,
+    "total_size": 10000
+  },
+  "warnings": [],
+  "next_steps": ["Deploy variant", "Monitor for regression"],
+  "audit": {
+    "experiment_type": "bayesian_ab",
+    "thresholds_applied": {"ship": 0.95, "reject": 0.05},
+    "assumptions": ["Independent observations between groups", "No selection bias in group assignment", "Jeffrey's prior is appropriate for conversion rates"],
+    "limitations": ["Monte Carlo simulation has finite sampling error", "No multiple testing correction applied"]
+  },
+  "inputs": {
+    "control_conversions": 100,
+    "control_total": 5000,
+    "variant_conversions": 130,
+    "variant_total": 5000
   }
 }
 ```
 
+Access fields via `.` attribute (e.g. `result.recommendation.decision`) or `.model_dump()` for dict. Serialize with `.model_dump_json()`.
+
 **When to use Bayesian vs Frequentist:**
-- Bayesian: small data, need probability distributions, want to stop early
-- Frequentist: large data, traditional significance testing, need p-values
 
 ### DiD Analysis
 
@@ -512,7 +544,7 @@ cd ~/clawd/agent-causal-decision-tool
 PYTHONPATH=. python3 -m src.cli schema
 ```
 
-This prints `schema.json` — a wrapper containing `schema_version`, `schema_coverage` (`ab`, `did`, `plan`), `schema_coverage_pending` (`bayes`, `cohort`), `severity_contract`, and `definitions` (JSON Schema from Pydantic models).
+This prints `schema.json` — a wrapper containing `schema_version`, `schema_coverage` (`ab`, `did`, `plan`, `bayes`), `schema_coverage_pending` (`cohort`), `severity_contract`, and `definitions` (JSON Schema from Pydantic models).
 
 All output models include `schema_version` field injected from package metadata — never hardcoded.
 

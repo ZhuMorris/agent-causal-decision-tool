@@ -9,7 +9,7 @@ from importlib.metadata import version as _pkg_version, PackageNotFoundError
 from src.ab_test import calculate_ab
 from src.did import calculate_did
 from src.planning import calculate_plan
-from src.bayes import calculate_bayes_ab
+from src.bayes import calculate_bayes_ab, BayesOutput
 from src.audit import format_audit_text, check_experiment_maturity, audit_ab_test, audit_did
 from src.cohort import cohort_breakdown
 from src import store
@@ -58,7 +58,7 @@ def bayes_ab(control, variant, name, output_format, auto_save, samples):
         sys.exit(1)
     
     result = calculate_bayes_ab(input_data, n_samples=samples)
-    result_json = json.dumps(result, indent=2)
+    result_json = result.model_dump_json(indent=2)
     
     if auto_save:
         row_id = store.save_experiment(result_json, "bayesian_ab", json.dumps(input_data))
@@ -699,54 +699,53 @@ def _print_did_text(result):
         click.echo(f"  - {a}")
 
 
-def _print_bayes_text(result):
+def _print_bayes_text(result: BayesOutput):
     """Print Bayesian A/B test in human-readable format"""
-    rec = result["recommendation"]
-    stats = result["statistics"]
-    traffic = result["traffic_stats"]
-    
+    rec = result.recommendation
+    stats = result.statistics
+    traffic = result.traffic_stats
+
     click.echo("=" * 50)
     click.echo("BAYESIAN A/B TEST RESULTS")
     click.echo("=" * 50)
-    click.echo(f"Decision: {rec['decision'].upper()} ({rec['confidence']} confidence)")
-    click.echo(f"Summary: {rec['summary']}")
+    click.echo(f"Decision: {rec.decision.upper()} ({rec.confidence} confidence)")
+    click.echo(f"Summary: {rec.summary}")
     click.echo()
     click.echo("Traffic:")
-    click.echo(f"  Control:  {traffic['control_size']:,}")
-    click.echo(f"  Variant:  {traffic['variant_size']:,}")
-    click.echo(f"  Total:    {traffic['total_size']:,}")
+    click.echo(f"  Control:  {traffic.control_size:,}")
+    click.echo(f"  Variant:  {traffic.variant_size:,}")
+    click.echo(f"  Total:    {traffic.total_size:,}")
     click.echo()
     click.echo("Posterior (after data):")
-    pc = stats["posterior_control"]
-    pv = stats["posterior_variant"]
-    click.echo(f"  Control:  Beta(α={pc['alpha']}, β={pc['beta']}) mean={pc['mean']:.4f}")
-    click.echo(f"  Variant:  Beta(α={pv['alpha']}, β={pv['beta']}) mean={pv['mean']:.4f}")
+    pc = stats.posterior_control
+    pv = stats.posterior_variant
+    click.echo(f"  Control:  Beta(α={pc.alpha}, β={pc.beta}) mean={pc.mean:.4f}")
+    click.echo(f"  Variant:  Beta(α={pv.alpha}, β={pv.beta}) mean={pv.mean:.4f}")
     click.echo()
-    n_samples = stats["monte_carlo_samples"]
+    n_samples = stats.monte_carlo_samples
     click.echo(f"Monte Carlo Results ({n_samples:,} samples):")
-    click.echo(f"  P(Variant wins):  {stats['p_variant_wins']:.4f}")
-    click.echo(f"  P(Control wins):  {stats['p_control_wins']:.4f}")
-    click.echo(f"  P(Tie):           {stats['p_tie']:.4f}")
+    click.echo(f"  P(Variant wins):  {stats.p_variant_wins:.4f}")
+    click.echo(f"  P(Control wins):  {stats.p_control_wins:.4f}")
+    click.echo(f"  P(Tie):           {stats.p_tie:.4f}")
     click.echo()
     click.echo("Lift Distribution:")
-    click.echo(f"  Median lift:  {stats['lift_median_pct']:.2f}%")
-    click.echo(f"  95% CI:       [{stats['lift_95ci_pct'][0]:.2f}%, {stats['lift_95ci_pct'][1]:.2f}%]")
+    click.echo(f"  Median lift:  {stats.lift_median_pct:.2f}%")
+    click.echo(f"  95% CI:       [{stats.lift_95ci_pct[0]:.2f}%, {stats.lift_95ci_pct[1]:.2f}%]")
     click.echo()
     click.echo("Observed Rates:")
-    click.echo(f"  Control rate:  {stats['control_rate_observed']:.4f}")
-    click.echo(f"  Variant rate:  {stats['variant_rate_observed']:.4f}")
-    click.echo(f"  Relative lift: {stats['relative_lift_pct']:.2f}%")
-    
-    warnings = result.get("warnings", [])
-    if warnings:
+    click.echo(f"  Control rate:  {stats.control_rate_observed:.4f}")
+    click.echo(f"  Variant rate:  {stats.variant_rate_observed:.4f}")
+    click.echo(f"  Relative lift: {stats.relative_lift_pct:.2f}%")
+
+    if result.warnings:
         click.echo()
         click.echo("Warnings:")
-        for w in warnings:
-            click.echo(f"  [{w['severity'].upper()}] {w['code']}: {w['message']}")
-    
+        for w in result.warnings:
+            click.echo(f"  [{w.severity.upper()}] {w.code.value}: {w.message}")
+
     click.echo()
     click.echo("Next steps:")
-    for step in result.get("next_steps", []):
+    for step in result.next_steps:
         click.echo(f"  -> {step}")
 
 

@@ -87,11 +87,11 @@ class TestGenerateSchema:
 
     def test_schema_coverage(self):
         schema = generate_schema()
-        assert schema["schema_coverage"] == ["ab", "did", "plan"]
+        assert schema["schema_coverage"] == ["ab", "did", "plan", "bayes"]
 
     def test_schema_coverage_pending(self):
         schema = generate_schema()
-        assert schema["schema_coverage_pending"] == ["bayes", "cohort"]
+        assert schema["schema_coverage_pending"] == ["cohort"]
 
     def test_severity_contract_keys(self):
         schema = generate_schema()

@@ -6,9 +6,9 @@ from pydantic import BaseModel
 
 from .schema import (
     ABTestInput, DIDInput, PlanningInput,
-    ABTestOutput, DIDOutput, PlanningOutput,
+    ABTestOutput, DIDOutput, PlanningOutput, BayesOutput,
     Recommendation, WarningDetail, TrafficStats,
-    SequentialSummary, DIDDiagnostics,
+    SequentialSummary, DIDDiagnostics, PosteriorStats, BayesianStatistics,
     WarningCode,
 )
 
@@ -34,9 +34,9 @@ def generate_schema() -> dict:
     definitions = {}
     for cls in [
         ABTestInput, DIDInput, PlanningInput,
-        ABTestOutput, DIDOutput, PlanningOutput,
+        ABTestOutput, DIDOutput, PlanningOutput, BayesOutput,
         Recommendation, WarningDetail, TrafficStats,
-        SequentialSummary, DIDDiagnostics,
+        SequentialSummary, DIDDiagnostics, PosteriorStats, BayesianStatistics,
     ]:
         definitions[cls.__name__] = _pydantic_to_json_schema(cls)
 
@@ -61,8 +61,8 @@ def generate_schema() -> dict:
 
     return {
         "schema_version": schema_version,
-        "schema_coverage": ["ab", "did", "plan"],
-        "schema_coverage_pending": ["bayes", "cohort"],
+        "schema_coverage": ["ab", "did", "plan", "bayes"],
+        "schema_coverage_pending": ["cohort"],
         "severity_contract": severity_contract,
         "definitions": definitions,
     }
