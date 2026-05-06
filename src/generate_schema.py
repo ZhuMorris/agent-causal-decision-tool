@@ -2,6 +2,7 @@
 
 import json
 from importlib.metadata import version as _pkg_version
+from src.schema import _get_version  # Use same fallback-safe version function
 from pydantic import BaseModel
 
 from .schema import (
@@ -29,7 +30,7 @@ def generate_schema() -> dict:
     - severity_contract: canonical severity levels and their meaning
     - definitions: JSON Schema for each Pydantic model, keyed by class name
     """
-    schema_version = _pkg_version("agent-causal-decision-tool")
+    schema_version = _get_version()
 
     definitions = {}
     for cls in [
