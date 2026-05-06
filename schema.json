@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.8.0",
+  "schema_version": "0.10.0",
   "schema_coverage": [
     "ab",
     "did",
@@ -1222,14 +1222,23 @@
               "$ref": "#/$defs/PosteriorStats"
             },
             "p_variant_wins": {
+              "description": "P(variant wins) \u2014 must be between 0 and 1",
+              "maximum": 1.0,
+              "minimum": 0.0,
               "title": "P Variant Wins",
               "type": "number"
             },
             "p_control_wins": {
+              "description": "P(control wins) \u2014 must be between 0 and 1",
+              "maximum": 1.0,
+              "minimum": 0.0,
               "title": "P Control Wins",
               "type": "number"
             },
             "p_tie": {
+              "description": "P(tie) \u2014 must be between 0 and 1",
+              "maximum": 1.0,
+              "minimum": 0.0,
               "title": "P Tie",
               "type": "number"
             },
@@ -1957,14 +1966,23 @@
           "$ref": "#/$defs/PosteriorStats"
         },
         "p_variant_wins": {
+          "description": "P(variant wins) \u2014 must be between 0 and 1",
+          "maximum": 1.0,
+          "minimum": 0.0,
           "title": "P Variant Wins",
           "type": "number"
         },
         "p_control_wins": {
+          "description": "P(control wins) \u2014 must be between 0 and 1",
+          "maximum": 1.0,
+          "minimum": 0.0,
           "title": "P Control Wins",
           "type": "number"
         },
         "p_tie": {
+          "description": "P(tie) \u2014 must be between 0 and 1",
+          "maximum": 1.0,
+          "minimum": 0.0,
           "title": "P Tie",
           "type": "number"
         },

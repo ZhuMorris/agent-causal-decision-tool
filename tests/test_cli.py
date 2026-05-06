@@ -164,12 +164,13 @@ class TestBayesCommand:
 class TestSchemaCommand:
     def test_schema_command(self):
         """agent-causal schema prints schema JSON."""
+        from src.schema import _get_version
         result = runner.invoke(main, ["schema"])
         assert result.exit_code == 0, result.stderr
         data = json.loads(result.stdout)
         assert "schema_version" in data
         assert "definitions" in data
-        assert data["schema_version"] == "0.8.0"
+        assert data["schema_version"] == _get_version()
 
     def test_schema_definitions_contain_ab_did_plan(self):
         result = runner.invoke(main, ["schema"])
