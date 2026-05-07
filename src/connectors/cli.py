@@ -95,14 +95,13 @@ def posthog(
             if connector.health_check():
                 click.echo("PostHog connector: configured ✓")
                 # Show what's loaded
-                key_display = connector._api_key[:8] + "..." if connector._api_key else "(missing)"
-                click.echo(f"  API key : {key_display}")
+                click.echo(f"  API key : {connector.masked_api_key}")
                 click.echo(f"  Project : {connector._project_id}")
                 click.echo(f"  Instance: {connector._instance_url}")
             else:
-                click.echo("PostHog connector: not configured ✗")
-                click.echo("  Set POSTHOG_API_KEY and POSTHOG_PROJECT_ID env vars,")
-                click.echo("  or add them to ~/.posthogrc")
+                click.echo("PostHog connector: not configured ✗", err=True)
+                click.echo("  Set POSTHOG_API_KEY and POSTHOG_PROJECT_ID env vars,", err=True)
+                click.echo("  or add them to ~/.posthogrc", err=True)
                 sys.exit(1)
             return
 

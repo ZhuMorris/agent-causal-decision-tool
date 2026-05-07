@@ -302,8 +302,13 @@ def _dispatch_action(action: str, params: dict) -> AgentDecisionOutput | list[di
 
     # connect: fetch experiment data from an external connector
     if action == "connect":
-        from .connectors import PostHogConnector, ConnectorError as ConnErr
-        from .errors import internal_error
+        from .connectors import (
+            PostHogConnector,
+            ConnectorAuthError,
+            ConnectorNotFoundError,
+            InsufficientDataError,
+            ConnectorError,
+        )
         source = params.get("source", "")
         experiment_id = params.get("experiment_id", "")
         if not experiment_id:
@@ -316,8 +321,23 @@ def _dispatch_action(action: str, params: dict) -> AgentDecisionOutput | list[di
                 connector = PostHogConnector()
                 result = connector.fetch_experiment(experiment_id)
                 return {"result": result.to_dict()}
-            except ConnErr as exc:
-                raise internal_error(f"Connector error: {exc}")
+            except ConnectorAuthError as exc:
+                raise validation_error(
+                    f"PostHog auth error: {exc}",
+                    [FieldError(field="source", issue="Invalid or insufficient PostHog credentials")]
+                )
+            except ConnectorNotFoundError as exc:
+                raise validation_error(
+                    f"Experiment '{experiment_id}' not found in PostHog",
+                    [FieldError(field="experiment_id", issue=str(exc))]
+                )
+            except InsufficientDataError as exc:
+                raise validation_error(
+                    str(exc),
+                    [FieldError(field=f, issue=f"missing or invalid") for f in exc.missing_fields]
+                )
+            except ConnectorError as exc:
+                raise internal_error(f"Connector error ({exc.source}): {exc}")
         else:
             raise validation_error(
                 f"Unknown connector source: '{source}'. Valid sources: posthog",

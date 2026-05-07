@@ -16,21 +16,23 @@ from datetime import datetime, timezone
 
 class ConnectorError(Exception):
     """Base exception for connector failures (auth, network, etc.)."""
-    pass
+
+    def __init__(self, message: str = "", source: str = "unknown"):
+        super().__init__(message)
+        self.source = source
 
 
 class InsufficientDataError(ConnectorError):
     """Raised when the source has experiment data but it's missing required fields."""
 
     def __init__(self, message: str, missing_fields: list[str], source: str = "unknown"):
-        super().__init__(message)
+        super().__init__(message, source)
         self.missing_fields = missing_fields
-        self.source = source
 
     def to_dict(self) -> dict:
         return {
             "error": "INSUFFICIENT_DATA",
-            "message": self.message,
+            "message": str(self),
             "missing_fields": self.missing_fields,
             "source": self.source,
         }
@@ -40,17 +42,15 @@ class ConnectorAuthError(ConnectorError):
     """Raised when credentials or auth to the source fail."""
 
     def __init__(self, message: str, source: str = "unknown"):
-        super().__init__(message)
-        self.source = source
+        super().__init__(message, source)
 
 
 class ConnectorNotFoundError(ConnectorError):
     """Raised when the experiment/resource is not found in the source."""
 
     def __init__(self, message: str, resource_id: str, source: str = "unknown"):
-        super().__init__(message)
+        super().__init__(message, source)
         self.resource_id = resource_id
-        self.source = source
 
 
 # ─── Result schema ────────────────────────────────────────────────────────────
