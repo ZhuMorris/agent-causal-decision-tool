@@ -48,8 +48,9 @@ def calculate_bayes_ab(input_data: dict, n_samples: int = 20000) -> BayesOutput:
     if n_samples < 1:
         raise ValueError(f"n_samples must be >= 1, got {n_samples}")
 
-    samples_control = np.random.beta(alpha_c, beta_c, n_samples)
-    samples_variant = np.random.beta(alpha_v, beta_v, n_samples)
+    rng = np.random.default_rng()
+    samples_control = rng.beta(alpha_c, beta_c, n_samples)
+    samples_variant = rng.beta(alpha_v, beta_v, n_samples)
 
     # Compute probabilities
     p_variant_wins = np.mean(samples_variant > samples_control)

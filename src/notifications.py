@@ -19,10 +19,6 @@ _executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="webhook-")
 
 def _fire_webhook_sync(url: str, payload: dict) -> None:
     """Synchronously fire a webhook. Logs errors and returns silently."""
-    if httpx is None:
-        _logger.warning("httpx not installed — webhook to %s not sent", url)
-        return
-
     try:
         client = httpx.Client(timeout=10.0)
         try:
@@ -42,7 +38,10 @@ def fire_webhook(url: str | None, payload: dict) -> None:
     """
     if not url:
         return
-    _executor.submit(_fire_webhook_sync, url, payload)
+    if httpx is None:
+        _logger.warning("httpx not installed — cannot fire webhook to %s", url)
+        return
+    _executor.submit(_fire_webhook_sync, url, payload.copy())
 
 
 def build_webhook_payload(

@@ -30,7 +30,7 @@ def cohort_breakdown(input_data: dict) -> dict:
         recommended_next_action, warnings, interaction_flag, and audit.
     """
     # Parse
-    experiment_id = input_data.get("experiment_id", "unknown")
+    experiment_id = input_data.get("experiment_id")
     metric = input_data.get("metric", "conversion_rate")
     segments_in = input_data.get("segments", [])
     prior_result_id = input_data.get("prior_result_id")
@@ -47,7 +47,7 @@ def cohort_breakdown(input_data: dict) -> dict:
         raise ValueError("At least one segment is required")
 
     # Validate required fields
-    if not experiment_id or experiment_id == "unknown":
+    if not experiment_id:
         raise ValueError("experiment_id is required for audit traceability")
     if not metric:
         raise ValueError("metric is required to label what is being measured")
@@ -161,8 +161,12 @@ def cohort_breakdown(input_data: dict) -> dict:
     cohort_decision_override = False
     cohort_override_reason = None
 
+    # Only fire override when a prior decision exists and contradicts the segment signal
+    # prior_decision=None means no prior decision — skip override in that case
+    override_triggers = ("wait", "escalate", "keep_running", "reject")
+
     for seg in segments_out:
-        if seg["decision"] == "strongly_positive" and prior_decision in ("wait", "escalate", "keep_running", "reject"):
+        if seg["decision"] == "strongly_positive" and prior_decision in override_triggers:
             cohort_decision_override = True
             cohort_override_reason = (
                 f"Strong positive signal in '{seg['segment_name']}' "

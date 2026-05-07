@@ -41,7 +41,7 @@ def calculate_ab(input_data: dict) -> ABTestOutput:
         p_value = 1.0
 
     # Relative lift
-    lift = ((p_v - p_c) / p_c * 100) if p_c > 0 else 0
+    lift = float("inf") if p_c == 0 and p_v > 0 else (((p_v - p_c) / p_c * 100) if p_c > 0 else 0)
 
     # Confidence interval (95%)
     diff = p_v - p_c
@@ -137,12 +137,7 @@ def calculate_ab(input_data: dict) -> ABTestOutput:
                 ))
                 next_steps.append("Review if variant has other benefits before escalating")
     else:
-        # Early stop was applied — decision already set in _evaluate_sequential
-        decision = seq_summary.reason  # will be overwritten below
-        confidence = "high"  # will be overwritten below
-
-    # Recalculate decision from sequential_summary when early stop was applied
-    if early_stop_applied:
+        # Early stop was applied — use sequential summary for the decision
         if seq_summary.reason == "p_below_threshold":
             if lift > 0:
                 decision = "ship"

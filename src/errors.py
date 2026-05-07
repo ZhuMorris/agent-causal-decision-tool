@@ -24,7 +24,7 @@ class APIException(Exception):
 
     The .error attribute carries the error data as a plain dict.
     """
-    def __init__(self, code: str, message: str, details: list[dict] = None, request_id: Optional[str] = None):
+    def __init__(self, code: str, message: str, details: Optional[list[dict]] = None, request_id: Optional[str] = None):
         self.code = code
         self.message = message
         self.details = details or []

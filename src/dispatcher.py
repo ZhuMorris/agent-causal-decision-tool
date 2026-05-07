@@ -42,7 +42,7 @@ def _detect_method(data: dict) -> str:
         return "cohort"
 
     # Bayesian: explicit flag
-    if data.get("bayesian") is True:
+    if data.get("bayesian"):
         return "bayesian"
 
     # A/B: control/variant conversions + totals

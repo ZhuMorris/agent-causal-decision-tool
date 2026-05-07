@@ -123,15 +123,18 @@ def _run_plan(input_data: dict) -> AgentDecisionOutput:
         details = _pydantic_to_field_errors(ve)
         raise validation_error("Invalid planning inputs", details)
 
-    result = calculate_plan({
-        "baseline_conversion_rate": plan_input.baseline_conversion_rate,
-        "mde_pct": plan_input.mde_pct,
-        "daily_traffic": plan_input.daily_traffic,
-        "confidence_level": plan_input.confidence_level,
-        "power": plan_input.power,
-        "allocation": plan_input.allocation,
-        "allocation_ratio": plan_input.allocation_ratio,
-    })
+    try:
+        result = calculate_plan({
+            "baseline_conversion_rate": plan_input.baseline_conversion_rate,
+            "mde_pct": plan_input.mde_pct,
+            "daily_traffic": plan_input.daily_traffic,
+            "confidence_level": plan_input.confidence_level,
+            "power": plan_input.power,
+            "allocation": plan_input.allocation,
+            "allocation_ratio": plan_input.allocation_ratio,
+        })
+    except ValueError as ve:
+        raise validation_error(str(ve), [FieldError(field="input", issue=str(ve))])
     return to_unified(result, "planning", "User requested experiment planning via plan_test action")
 
 
