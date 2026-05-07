@@ -4,13 +4,15 @@ Each action wraps an existing internal function and returns a unified
 AgentDecisionOutput. Input validation uses the existing Pydantic input models.
 
 Actions:
-  decide_ab        — Frequentist A/B test
+  decide          — Easy-mode dispatcher (auto-selects A/B, Bayesian, DiD, planning)
+  decide_ab       — Frequentist A/B test
   decide_rollout   — DiD (staged rollout / quasi-experiment)
-  plan_test        — Experiment planning
-  audit_result     — Full audit of a stored result
-  save_result      — Persist a decision result to SQLite
-  get_result       — Retrieve a stored result by ID
-  compare_results  — Compare multiple stored experiments
+  plan_test       — Experiment planning
+  audit_result    — Full audit of a stored result
+  save_result     — Persist a decision result to SQLite
+  get_result      — Retrieve a stored result by ID
+  compare_results — Compare multiple stored experiments
+  connect         — Fetch experiment data from external connectors (e.g. PostHog)
 """
 
 from __future__ import annotations

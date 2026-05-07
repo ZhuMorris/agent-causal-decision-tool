@@ -168,25 +168,32 @@ def _build_http_app():
 
         responses = []
         for req in requests:
-            request_id = _get_request_id(req)
+            request_id = _get_request_id(req)  # None = notification
             method = req.get("method")
             params = req.get("params", {})
             if not isinstance(params, dict):
-                responses.append({
-                    "jsonrpc": "2.0",
-                    "error": {"code": -32600, "message": "Invalid params: must be an object"},
-                    "id": request_id,
-                })
+                # Notifications (no id) get no response per JSON-RPC 2.0 spec
+                if request_id is not None:
+                    responses.append({
+                        "jsonrpc": "2.0",
+                        "error": {"code": -32602, "message": "Invalid params: must be an object"},
+                        "id": request_id,
+                    })
                 continue
             if method is None:
-                responses.append({
-                    "jsonrpc": "2.0",
-                    "error": {"code": -32600, "message": "Missing method field"},
-                    "id": request_id,
-                })
+                if request_id is not None:
+                    responses.append({
+                        "jsonrpc": "2.0",
+                        "error": {"code": -32600, "message": "Missing method field"},
+                        "id": request_id,
+                    })
                 continue
-            responses.append(run_action(method, params, request_id))
+            result = run_action(method, params, request_id)
+            if request_id is not None:
+                responses.append(result)
 
+        if len(responses) == 0:
+            return Response(status_code=204)
         if len(responses) == 1:
             return JSONResponse(content=responses[0])
         return JSONResponse(content=responses)
