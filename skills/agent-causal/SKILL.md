@@ -4,7 +4,7 @@ description: "Agent Causal Decision Tool helps you and your AI agents answer one
 metadata:
   openclaw:
     category: data-science
-    version: "0.9.5"
+    version: "0.9.6"
     license: Apache-2.0
     tools: [exec]
     requires:
