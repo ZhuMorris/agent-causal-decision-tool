@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+
+try:
+    import httpx
+except ImportError:
+    httpx = None  # type: ignore
 
 _logger = logging.getLogger(__name__)
 
@@ -15,9 +19,7 @@ _executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="webhook-")
 
 def _fire_webhook_sync(url: str, payload: dict) -> None:
     """Synchronously fire a webhook. Logs errors and returns silently."""
-    try:
-        import httpx
-    except ImportError:
+    if httpx is None:
         _logger.warning("httpx not installed — webhook to %s not sent", url)
         return
 

@@ -201,10 +201,60 @@ class TestNotifications:
         time.sleep(0.5)
         mock_client.post.assert_called_once()
 
-    @patch("httpx.Client", side_effect=ImportError("httpx not installed"))
-    def test_fire_webhook_failure_silent(self, mock_client_cls):
-        """fire_webhook failures are logged but do not raise."""
+    def test_fire_webhook_failure_silent(self):
+        """httpx not installed → warning logged, no exception raised."""
+        import time
         from src.notifications import fire_webhook
 
-        # Should not raise — silent failure
-        fire_webhook("https://example.com/webhook", {"decision": "ship"})
+        with patch("src.notifications.httpx", None):
+            with patch("logging.Logger.warning") as mock_log:
+                fire_webhook("https://example.com/webhook", {"decision": "ship"})
+                # Wait for the thread pool to process
+                time.sleep(0.5)
+                mock_log.assert_called_once()
+                assert "not installed" in mock_log.call_args[0][0]
+
+    @patch("src.actions.fire_webhook")
+    def test_run_workflow_notify_fires_on_ship(self, mock_fire):
+        """notify=True with a ship decision calls fire_webhook exactly once."""
+        import os
+        os.environ["AGENT_CAUSAL_WEBHOOK_URL"] = "https://example.com/webhook"
+        try:
+            params = {
+                "control_conversions": 100,
+                "control_total": 5000,
+                "variant_conversions": 130,
+                "variant_total": 5000,
+                "save": False,
+                "notify": True,
+            }
+            result = run_workflow(params)
+            assert result["decision_result"]["decision"] == "ship"
+            mock_fire.assert_called_once()
+            call_args = mock_fire.call_args[0]
+            assert call_args[0] == "https://example.com/webhook"
+            assert call_args[1]["decision"] == "ship"
+            assert call_args[1]["method"] == "ab_test"
+        finally:
+            del os.environ["AGENT_CAUSAL_WEBHOOK_URL"]
+
+    @patch("src.actions.fire_webhook")
+    def test_run_workflow_notify_does_not_fire_on_keep_running(self, mock_fire):
+        """notify=True with keep_running does NOT call fire_webhook."""
+        import os
+        os.environ["AGENT_CAUSAL_WEBHOOK_URL"] = "https://example.com/webhook"
+        try:
+            # 5% vs 9% with n=100 — positive lift but inconclusive → keep_running
+            params = {
+                "control_conversions": 5,
+                "control_total": 100,
+                "variant_conversions": 9,
+                "variant_total": 100,
+                "save": False,
+                "notify": True,
+            }
+            result = run_workflow(params)
+            assert result["decision_result"]["decision"] == "keep_running"
+            mock_fire.assert_not_called()
+        finally:
+            del os.environ["AGENT_CAUSAL_WEBHOOK_URL"]
