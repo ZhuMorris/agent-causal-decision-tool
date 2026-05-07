@@ -7,8 +7,8 @@ Supports two transports:
            Run with: uvicorn src.api:app --port 8000
            Or: python -m src.api http [--port 8000]
 
-Both transports expose the same 7 actions:
-  decide_ab, decide_rollout, plan_test, audit_result,
+Both transports expose the same 8 actions:
+  decide, decide_ab, decide_rollout, plan_test, audit_result,
   save_result, get_result, compare_results
 
 Request/response format is JSON-RPC 2.0.
@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import sys
+from importlib.metadata import version as _pkg_version, PackageNotFoundError
 from typing import Optional
 
 from .actions import run_action
@@ -35,6 +36,8 @@ def _parse_request(data: dict | list) -> tuple[list[dict], Optional[dict]]:
     """
     # Batch request
     if isinstance(data, list):
+        if len(data) == 0:
+            return [], parse_error("Invalid batch request: empty array")
         for item in data:
             if not isinstance(item, dict):
                 return [], parse_error("Batch item must be a JSON-RPC request object")
@@ -93,12 +96,20 @@ def run_stdio():
                 print(json.dumps(parse_err), flush=True)
                 continue
 
-            # Process requests
-            responses = []
+            # Process requests — skip response for notifications (no id = no response per JSON-RPC 2.0)
             for req in requests:
-                request_id = _get_request_id(req)
+                request_id = _get_request_id(req)  # None = notification
                 method = req.get("method")
                 params = req.get("params", {})
+                if not isinstance(params, dict):
+                    err_resp = {
+                        "jsonrpc": "2.0",
+                        "error": {"code": -32600, "message": "Invalid params: must be an object"},
+                        "id": request_id,
+                    }
+                    if request_id is not None:
+                        print(json.dumps(err_resp), flush=True)
+                    continue
 
                 if method is None:
                     err_resp = {
@@ -106,15 +117,16 @@ def run_stdio():
                         "error": {"code": -32600, "message": "Missing method field"},
                         "id": request_id,
                     }
-                    responses.append(err_resp)
+                    # Notifications (request_id is None) still get an error response
+                    # only if the request itself was malformed; if id is None it's a notification
+                    if request_id is not None:
+                        print(json.dumps(err_resp), flush=True)
                     continue
 
                 result = run_action(method, params, request_id)
-                responses.append(result)
-
-            # Send responses (empty list for notifications = no output)
-            for resp in responses:
-                print(json.dumps(resp), flush=True)
+                # Only emit response if request had an id (not a notification)
+                if request_id is not None:
+                    print(json.dumps(result), flush=True)
 
     except BrokenPipeError:
         # stdout closed — exit silently
@@ -123,13 +135,21 @@ def run_stdio():
 
 # ─── HTTP transport (FastAPI) ────────────────────────────────────────────────
 
+def _get_version():
+    """Get the installed package version or 'unknown' if not installed."""
+    try:
+        return _pkg_version("agent_causal_decision_tool")
+    except PackageNotFoundError:
+        return "unknown"
+
 def _build_http_app():
     """Build the FastAPI app with both RPC and health endpoints."""
     from fastapi import FastAPI, Request, Response
     from fastapi.responses import JSONResponse
     import uvicorn
 
-    app = FastAPI(title="Agent Causal Decision API", version="0.9.0")
+    _ver = _get_version()
+    app = FastAPI(title="Agent Causal Decision API", version=_ver)
 
     @app.post("/rpc")
     async def rpc_endpoint(request: Request) -> Response:
@@ -151,6 +171,13 @@ def _build_http_app():
             request_id = _get_request_id(req)
             method = req.get("method")
             params = req.get("params", {})
+            if not isinstance(params, dict):
+                responses.append({
+                    "jsonrpc": "2.0",
+                    "error": {"code": -32600, "message": "Invalid params: must be an object"},
+                    "id": request_id,
+                })
+                continue
             if method is None:
                 responses.append({
                     "jsonrpc": "2.0",
@@ -167,7 +194,7 @@ def _build_http_app():
     @app.get("/health")
     async def health():
         """Health check endpoint."""
-        return {"status": "ok", "version": "0.9.0"}
+        return {"status": "ok", "version": _ver}
 
     return app
 

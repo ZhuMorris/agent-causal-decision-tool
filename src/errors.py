@@ -98,7 +98,7 @@ def method_not_found(method: str, request_id: Optional[str] = None) -> APIExcept
     """Build a METHOD_NOT_FOUND exception."""
     return APIException(
         code=ErrorCode.METHOD_NOT_FOUND.value,
-        message=f"Unknown action: '{method}'. Valid actions are: decide_ab, decide_rollout, plan_test, audit_result, save_result, get_result, compare_results",
+        message=f"Unknown action: '{method}'. Valid actions are: decide, decide_ab, decide_rollout, plan_test, audit_result, save_result, get_result, compare_results",
         details=[],
         request_id=request_id,
     )

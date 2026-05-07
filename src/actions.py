@@ -292,7 +292,7 @@ def _dispatch_action(action: str, params: dict) -> AgentDecisionOutput | list[di
                 comparison["error"],
                 [FieldError(field="experiment_ids", issue=comparison["error"])]
             )
-        return compari    # decide: easy-mode dispatcher — auto-selects the right method
+        return comparison  # decide: easy-mode dispatcher — auto-selects the right method
     if action == "decide":
         samples = params.get("samples", 20000)
         input_data = params.get("input", params)
