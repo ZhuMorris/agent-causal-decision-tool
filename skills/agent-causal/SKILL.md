@@ -81,6 +81,7 @@ python -m src.api http --port 8000
 
 | Action | Description |
 |--------|-------------|
+| `decide` | **Easy-mode dispatcher** — auto-selects A/B, Bayesian, DiD, or planning from your input fields |
 | `decide_ab` | Frequentist A/B test (`mode: frequentist`) or Bayesian (`mode: bayesian`) |
 | `decide_rollout` | DiD for staged rollouts / quasi-experiments |
 | `plan_test` | Experiment planning (sample size, MDE, feasibility) |
@@ -142,6 +143,38 @@ python -m src.api http --port 8000
 ---
 
 ## Commands
+
+### Easy-mode Dispatcher (`decide`)
+
+**Don't know which method you need?** `decide` auto-detects from your input fields — no need to pick the right command:
+
+```bash
+# A/B test (auto-detected)
+PYTHONPATH=. python3 -m src.cli decide --control 100/5000 --variant 130/5000
+PYTHONPATH=. python3 -m src.cli decide --control 100/5000 --variant 130/5000 --format text
+
+# Bayesian A/B (--bayesian flag)
+PYTHONPATH=. python3 -m src.cli decide --control 100/5000 --variant 130/5000 --bayesian
+
+# DiD / staged rollout (auto-detected from pre/post treated fields)
+PYTHONPATH=. python3 -m src.cli decide --pre-control 1000 --post-control 1200 --pre-treated 200 --post-treated 280
+
+# Experiment planning (auto-detected from --baseline + --mde)
+PYTHONPATH=. python3 -m src.cli decide --baseline 0.05 --mde 10 --traffic 10000
+```
+
+
+**Auto-detection matrix:**
+| You provide... | It runs... |
+|---|---|
+| `--control` + `--variant` | Frequentist A/B |
+| `--control` + `--variant` + `--bayesian` | Bayesian A/B |
+| `--pre-control` + `--post-control` + `--pre-treated` + `--post-treated` | DiD (Difference-in-Differences) |
+| `--baseline` + `--mde` | Experiment planning |
+
+**JSON-RPC:** `{"jsonrpc":"2.0","method":"decide","params":{...fields...},"id":"1"}` — same auto-detection over stdio or HTTP.
+
+---
 
 ### Experiment Planning (ab_plan)
 

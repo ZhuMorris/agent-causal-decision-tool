@@ -34,7 +34,7 @@ def _detect_method(data: dict) -> str:
         return "did"
 
     # Planning: baseline conversion rate + MDE
-    if _PLANNING_FIELDS.intersection(keys) and "mde_pct" in keys:
+    if _PLANNING_FIELDS.issubset(keys):
         return "planning"
 
     # Cohort: segment or breakdown field

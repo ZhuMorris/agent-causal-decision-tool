@@ -193,7 +193,7 @@ def decide_cmd(control, variant, pre_control, post_control, pre_treated, post_tr
         input_data["bayesian"] = True
 
     if not input_data:
-        raise click.UsageException(
+        raise click.UsageError(
             "No recognizable inputs provided. Use --control/--variant for A/B, "
             "--pre-control/--post-control/--pre-treated/--post-treated for DiD, "
             "or --baseline/--mde for planning."

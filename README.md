@@ -72,6 +72,7 @@ uvicorn src.api:app --port 8000
 
 | Action | Description |
 |--------|-------------|
+| `decide` | **Easy-mode dispatcher** — auto-selects A/B, Bayesian, DiD, or planning from your input fields |
 | `decide_ab` | Frequentist A/B test (mode: frequentist) or Bayesian A/B (mode: bayesian) |
 | `decide_rollout` | Difference-in-differences for staged rollouts |
 | `plan_test` | Experiment planning (sample size, MDE, feasibility) |
@@ -172,6 +173,38 @@ clawhub install agent-causal
 ```
 
 ## Commands
+
+### Easy-mode Dispatcher (`decide`)
+
+**Don't know which method you need?** `decide` auto-detects from your input fields:
+
+```bash
+# A/B test (auto-detected from --control/--variant)
+PYTHONPATH=. python3 -m src.cli decide --control 100/5000 --variant 130/5000
+PYTHONPATH=. python3 -m src.cli decide --control 100/5000 --variant 130/5000 --format text
+
+# Bayesian A/B (--bayesian flag)
+PYTHONPATH=. python3 -m src.cli decide --control 100/5000 --variant 130/5000 --bayesian
+
+# DiD / staged rollout (auto-detected from pre/post treated fields)
+PYTHONPATH=. python3 -m src.cli decide --pre-control 1000 --post-control 1200 --pre-treated 200 --post-treated 280
+
+# Experiment planning (auto-detected from --baseline + --mde)
+PYTHONPATH=. python3 -m src.cli decide --baseline 0.05 --mde 10 --traffic 10000
+
+# JSON-RPC API — same auto-detection
+{"jsonrpc":"2.0","method":"decide","params":{"control_conversions":100,"control_total":5000,"variant_conversions":130,"variant_total":5000},"id":"1"}
+```
+
+**Auto-detection:**
+| You provide... | It runs... |
+|---|---|
+| `--control` + `--variant` | Frequentist A/B |
+| `--control` + `--variant` + `--bayesian` | Bayesian A/B |
+| `--pre-control` + `--post-control` + `--pre-treated` + `--post-treated` | DiD (Difference-in-Differences) |
+| `--baseline` + `--mde` | Experiment planning |
+
+---
 
 ### Experiment Planning (`plan`)
 
