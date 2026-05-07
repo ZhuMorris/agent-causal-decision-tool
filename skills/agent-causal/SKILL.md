@@ -89,6 +89,7 @@ python -m src.api http --port 8000
 | `save_result` | Persist a decision result to SQLite history |
 | `get_result` | Retrieve a stored result by ID |
 | `compare_results` | Compare multiple stored experiments |
+| `connect` | Fetch experiment data from an external connector (e.g. PostHog) |
 
 ### Request format
 

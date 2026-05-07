@@ -7,9 +7,9 @@ Supports two transports:
            Run with: uvicorn src.api:app --port 8000
            Or: python -m src.api http [--port 8000]
 
-Both transports expose the same 8 actions:
+Both transports expose the same 9 actions:
   decide, decide_ab, decide_rollout, plan_test, audit_result,
-  save_result, get_result, compare_results
+  save_result, get_result, compare_results, connect
 
 Request/response format is JSON-RPC 2.0.
 Error responses use the structured APIErrorResponse envelope.

@@ -300,5 +300,29 @@ def _dispatch_action(action: str, params: dict) -> AgentDecisionOutput | list[di
                       if k not in ("mode", "samples", "action", "request_id")}
         return run_decision_workflow(input_data, samples=samples)
 
+    # connect: fetch experiment data from an external connector
+    if action == "connect":
+        from .connectors import PostHogConnector, ConnectorError as ConnErr
+        from .errors import internal_error
+        source = params.get("source", "")
+        experiment_id = params.get("experiment_id", "")
+        if not experiment_id:
+            raise validation_error(
+                "Missing required field: experiment_id",
+                [FieldError(field="experiment_id", issue="experiment_id is required")]
+            )
+        if source == "posthog":
+            try:
+                connector = PostHogConnector()
+                result = connector.fetch_experiment(experiment_id)
+                return {"result": result.to_dict()}
+            except ConnErr as exc:
+                raise internal_error(f"Connector error: {exc}")
+        else:
+            raise validation_error(
+                f"Unknown connector source: '{source}'. Valid sources: posthog",
+                [FieldError(field="source", issue=f"Unknown source: {source}")]
+            )
+
     # Unknown action
     raise method_not_found(action)

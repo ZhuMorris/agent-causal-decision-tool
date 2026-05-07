@@ -909,6 +909,10 @@ main.add_command(did_analysis, "did-estimate")
 main.add_command(audit, "audit-decision")
 main.add_command(cohort_breakdown_cmd, "cohort-analyze")
 
+# Connect to external experiment sources
+from .connectors import cli as connectors_cli
+main.add_command(connectors_cli.connect_group, "connect")
+
 
 if __name__ == "__main__":
     main()
