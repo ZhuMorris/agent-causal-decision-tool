@@ -64,23 +64,19 @@ This skill runs as a **local CLI tool only**. After one-time setup, it requires 
 **Setup (one-time, before first use):**
 ```bash
 # Download the release tarball — no git clone needed
-curl -sL https://github.com/ZhuMorris/agent-causal-decision-tool/archive/refs/tags/v0.10.0.tar.gz -o agent-causal.tar.gz
+curl -sL https://github.com/ZhuMorris/agent-causal-decision-tool/archive/refs/tags/v0.10.1.tar.gz -o agent-causal.tar.gz
 tar -xzf agent-causal.tar.gz
-pip install agent-causal-decision-tool-0.10.0/ -q
-
-# Or clone once and install from local path (if you already have the repo):
-git clone https://github.com/ZhuMorris/agent-causal-decision-tool.git ~/clawd/agent-causal-decision-tool
-pip install ~/clawd/agent-causal-decision-tool -q
+pip install agent-causal-decision-tool-0.10.1/ -q
 ```
 
 
-After installation, the `agent-causal` command is available locally. The skill itself only reads your experiment data and runs local statistical calculations.
+After installation, the `agent-causal` command is available locally. The tool performs only local statistical calculations.
 
-**No runtime network access.** The tool does not fetch code, pull external dependencies at runtime, or make outbound network requests during analysis.
+**When network access occurs:** The PostHog connector (`agent-causal connect posthog`) makes outbound HTTPS requests to your PostHog instance only when explicitly invoked — never automatically. If you do not use the connector, no outbound network access is needed at any point.
 
+**No runtime network access during analysis.** The decision engine, audit, and cohort analysis do not make outbound requests.
 **Tools used:** `exec` (for running the `agent-causal` CLI commands you specify). Commands are fully hardcoded with no user-supplied strings interpolated into shell execution.
-
-
+**PostHog token scope:** Use a read-only API token with minimal scopes. Do not use tokens with write or admin permissions.
 **Credential handling:** PostHog API credentials are read from env vars (`POSTHOG_API_KEY`/`POSTHOG_PROJECT_ID`) or a local `~/.posthogrc` file — never hardcoded or logged.
 
 ---
