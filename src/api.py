@@ -4,8 +4,7 @@ Supports two transports:
   stdio  — For agent tool integration (OpenClaw, Codex, Claude Code, etc.)
            Run with: python -m src.api stdio
   http   — FastAPI server for direct external access.
-           Run with: uvicorn src.api:app --port 8000
-           Or: python -m src.api http [--port 8000]
+           Run with: python -m src.api http [--port 8000]
 
 Both transports expose the same 10 actions:
   decide, decide_ab, decide_rollout, plan_test, audit_result,

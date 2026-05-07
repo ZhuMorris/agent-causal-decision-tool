@@ -81,10 +81,10 @@ class ABTestInput(BaseModel):
 
 class DIDInput(BaseModel):
     """Difference-in-Differences input schema"""
-    pre_control: float = Field(..., description="Control group metric before treatment")
-    post_control: float = Field(..., description="Control group metric after treatment")
-    pre_treated: float = Field(..., description="Treated group metric before treatment")
-    post_treated: float = Field(..., description="Treated group metric after treatment")
+    pre_control: float = Field(..., ge=0, description="Control group metric before treatment")
+    post_control: float = Field(..., ge=0, description="Control group metric after treatment")
+    pre_treated: float = Field(..., ge=0, description="Treated group metric before treatment")
+    post_treated: float = Field(..., ge=0, description="Treated group metric after treatment")
     # Bootstrap CI settings
     n_bootstrap: int = Field(default=2000, ge=500, le=10000, description="Number of bootstrap resamples for DiD CI (500–10000)")
     # DiD diagnostics metadata
