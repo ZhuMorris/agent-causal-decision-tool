@@ -13,6 +13,7 @@ from src.bayes import calculate_bayes_ab, BayesOutput
 from src.audit import format_audit_text, check_experiment_maturity, audit_ab_test, audit_did
 from src.cohort import cohort_breakdown
 from src.dispatcher import run_decision_workflow
+from src.actions import run_workflow
 from src import store
 
 
@@ -910,6 +911,114 @@ main.add_command(audit, "audit-decision")
 main.add_command(cohort_breakdown_cmd, "cohort-analyze")
 
 # Connect to external experiment sources
+@main.command("workflow")
+@click.option("--control", help="Control group: conversions/total (e.g., 100/5000)")
+@click.option("--variant", help="Variant group: conversions/total (e.g., 130/5000)")
+@click.option("--pre-control", "pre_control", type=float, help="DiD pre-period control metric")
+@click.option("--post-control", "post_control", type=float, help="DiD post-period control metric")
+@click.option("--pre-treated", "pre_treated", type=float, help="DiD pre-period treated metric")
+@click.option("--post-treated", "post_treated", type=float, help="DiD post-period treated metric")
+@click.option("--baseline", "baseline_conversion_rate", type=float, help="Planning: baseline conversion rate")
+@click.option("--mde", "mde_pct", type=float, help="Planning: minimum detectable effect in %%")
+@click.option("--traffic", "daily_traffic", type=int, help="Planning: daily traffic per arm")
+@click.option("--bayesian", "bayesian", is_flag=True, help="Force Bayesian A/B")
+@click.option("--format", "output_format", type=click.Choice(["json", "text"]), default="json")
+@click.option("--save", "auto_save", is_flag=True, help="Save result to experiment history (default: True)", default=True)
+@click.option("--notify", "auto_notify", is_flag=True, help="Fire webhook on ship/reject/escalate decision")
+@click.option("--dry-run", "dry_run", is_flag=True, help="Validate connector connectivity without running decision")
+@click.option("--compare-with", "compare_with", help="Comma-separated list of prior experiment IDs to compare with")
+@click.option("--samples", default=20000, type=int, help="Monte Carlo samples for Bayesian (default: 20000)")
+def workflow_cmd(control, variant, pre_control, post_control, pre_treated, post_treated,
+                  baseline_conversion_rate, mde_pct, daily_traffic, bayesian,
+                  output_format, auto_save, auto_notify, dry_run, compare_with, samples):
+    """Run the full workflow orchestrator: decide + audit + save (+ optional notify + compare).
+
+
+    Accepts the same input flavors as decide:
+      A/B test    — --control + --variant
+      DiD         — --pre-control + --post-control + --pre-treated + --post-treated
+      Planning    — --baseline + --mde (+ --traffic)
+      Bayesian    — --bayesian flag
+
+    Additional flags:
+      --save           Persist result to SQLite (default: True)
+      --notify         Fire webhook on ship/reject/escalate decision
+      --dry-run        Validate input without running the decision
+      --compare-with   Compare with prior experiments by ID (comma-separated)
+    """
+    # Parse compare_with
+    compare_ids = []
+    if compare_with:
+        try:
+            compare_ids = [int(x.strip()) for x in compare_with.split(",") if x.strip()]
+        except ValueError:
+            raise click.BadParameter("compare_with must be comma-separated integers")
+
+
+    # Build input dict
+    input_data = {}
+    if control and variant:
+        try:
+            c_parts = control.split("/")
+            v_parts = variant.split("/")
+            input_data.update({
+                "control_conversions": int(c_parts[0]),
+                "control_total": int(c_parts[1]),
+                "variant_conversions": int(v_parts[0]),
+                "variant_total": int(v_parts[1]),
+            })
+        except (ValueError, IndexError) as e:
+            raise click.BadParameter(f"Invalid control/variant format: {e}. Use: --control 100/5000 --variant 130/5000")
+
+    if pre_control is not None and post_control is not None and pre_treated is not None and post_treated is not None:
+        input_data.update({
+            "pre_control": float(pre_control),
+            "post_control": float(post_control),
+            "pre_treated": float(pre_treated),
+            "post_treated": float(post_treated),
+        })
+
+    if baseline_conversion_rate is not None and mde_pct is not None:
+        input_data.update({
+            "baseline_conversion_rate": baseline_conversion_rate,
+            "mde_pct": mde_pct,
+        })
+        if daily_traffic:
+            input_data["daily_traffic"] = daily_traffic
+
+    if bayesian:
+        input_data["bayesian"] = True
+
+    if not input_data:
+        raise click.UsageError(
+            "No recognizable inputs provided. Use --control/--variant for A/B, "
+            "--pre-control/--post-control/--pre-treated/--post-treated for DiD, "
+            "or --baseline/--mde for planning."
+        )
+
+    # Build action params
+    params = {
+        **input_data,
+        "save": auto_save,
+        "notify": auto_notify,
+        "dry_run": dry_run,
+        "compare_with": compare_ids,
+        "samples": samples,
+    }
+
+    result = run_workflow(params)
+
+    if output_format == "json":
+        click.echo(json.dumps(result, indent=2))
+    else:
+        dr = result.get("decision_result", {})
+        click.echo(f"Decision:     {dr.get('decision', 'unknown').upper()}")
+        click.echo(f"Method:        {result.get('selected_method')}")
+        click.echo(f"Saved ID:      {result.get('saved_result_id')}")
+        click.echo(f"Compare:       {result.get('comparison_summary') is not None}")
+
+
+
 from .connectors import cli as connectors_cli
 main.add_command(connectors_cli.connect_group, "connect")
 

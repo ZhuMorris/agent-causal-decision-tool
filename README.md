@@ -85,6 +85,7 @@ uvicorn src.api:app --port 8000
 | `get_result` | Retrieve a stored result by ID |
 | `compare_results` | Compare multiple stored experiments |
 | `connect` | Fetch experiment data from external connectors (e.g. PostHog) |
+| `run_workflow` | **Orchestrator** — fetch + decide + audit + save + notify + compare in one call |
 
 ### Request format
 
@@ -473,6 +474,62 @@ PYTHONPATH=. python3 -m src.cli connect posthog --experiment-id <id> --decide
   "warnings": []
 }
 ```
+---
+
+## Workflow Orchestrator (`run_workflow`)
+
+The `run_workflow` action chains fetch + decide + audit + save + notify + compare in one call:
+
+```bash
+# A/B workflow (auto-detect method, save result)
+PYTHONPATH=. python3 -m src.cli workflow --control 100/5000 --variant 130/5000
+
+# Dry-run: validate connector + data without running decision
+PYTHONPATH=. python3 -m src.cli workflow --control 100/5000 --variant 130/5000 --dry-run
+
+# With notify (fires webhook on ship/reject/escalate; set AGENT_CAUSAL_WEBHOOK_URL env var)
+PYTHONPATH=. python3 -m src.cli workflow --control 100/5000 --variant 130/5000 --notify
+
+# Compare with prior experiments
+PYTHONPATH=. python3 -m src.cli workflow --control 100/5000 --variant 130/5000 --compare-with 1,3,5
+```
+
+**JSON-RPC example:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "run_workflow",
+  "params": {
+    "control_conversions": 100,
+    "control_total": 5000,
+    "variant_conversions": 130,
+    "variant_total": 5000,
+    "save": true,
+    "notify": true,
+    "compare_with": [1, 3]
+  },
+  "id": "1"
+}
+```
+
+**Response:**
+```json
+{
+  "selected_method": "ab_test",
+  "decision_result": { ... },
+  "audit_result": { ... },
+  "saved_result_id": 42,
+  "comparison_summary": { ... },
+  "source_metadata": null
+}
+```
+
+**Flags:**
+- `--dry-run` — validate connector + data, skip decision
+- `--notify` — fire webhook on ship/reject/escalate (set AGENT_CAUSAL_WEBHOOK_URL env var)
+- `--compare-with id1,id2` — compare with prior experiments
+- `--save` — persist to SQLite (default: True)
+
 
 ---
 

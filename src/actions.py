@@ -13,11 +13,14 @@ Actions:
   get_result      — Retrieve a stored result by ID
   compare_results — Compare multiple stored experiments
   connect         — Fetch experiment data from external connectors (e.g. PostHog)
+  run_workflow    — Orchestrator: fetch + decide + save + notify + compare in one call
 """
 
 from __future__ import annotations
 
 import json
+import logging
+import os
 from typing import Any, Optional
 
 from pydantic import ValidationError as PydanticValidationError
@@ -35,6 +38,9 @@ from .errors import (
     internal_error, result_not_found, save_failed,
     FieldError,
 )
+from .notifications import fire_webhook, build_webhook_payload
+
+_logger = logging.getLogger(__name__)
 
 
 # ─── Input dispatch ──────────────────────────────────────────────────────────
@@ -346,5 +352,181 @@ def _dispatch_action(action: str, params: dict) -> AgentDecisionOutput | list[di
                 [FieldError(field="source", issue=f"Unknown source: {source}")]
             )
 
+    # run_workflow: orchestrator — fetch + decide + save + notify + compare
+    if action == "run_workflow":
+        return run_workflow(params)
+
+
     # Unknown action
     raise method_not_found(action)
+
+
+def run_workflow(params: dict) -> dict:
+    """run_workflow — orchestrator action: fetch + decide + save + notify + compare.
+
+    Args:
+        params dict with keys:
+          source          — "posthog" to fetch from PostHog before running; omit to use input data directly
+          experiment_id  — required when source="posthog"
+          input          — decision input (same fields as decide action); ignored when source is set
+          control_conversions, control_total, variant_conversions, variant_total — A/B fields
+          bayesian       — bool, optional
+          samples        — int, Monte Carlo samples for Bayesian (default 20000)
+          dry_run        — bool, if True validate connector + normalize data without running decision
+          save           — bool, whether to persist result to SQLite (default True)
+          notify         — bool, whether to fire webhook on decision (default False)
+          compare_with   — list of prior result IDs to compare against (optional)
+
+    Returns:
+        dict with keys: selected_method, decision_result, audit_result,
+                        saved_result_id (or None), comparison_summary (or None), source_metadata
+    """
+    dry_run = params.get("dry_run", False)
+    source = params.get("source", "")
+    save = params.get("save", True)
+    notify = params.get("notify", False)
+    compare_with = params.get("compare_with", [])
+    samples = params.get("samples", 20000)
+
+    # ── 1. Fetch from connector if source is set ──────────────────────────
+    experiment_id = params.get("experiment_id", "")
+    normalized_data = None
+    source_metadata = None
+
+    if source == "posthog":
+        from .connectors import (
+            PostHogConnector,
+            ConnectorAuthError,
+            ConnectorNotFoundError,
+            InsufficientDataError,
+            ConnectorError,
+        )
+        connector = PostHogConnector()
+
+        # Dry-run: just validate connectivity and normalize
+        if dry_run:
+            health = connector.health_check()
+            validation_result = {
+                "dry_run": True,
+                "connector_connected": health,
+                "source": source,
+                "experiment_id": experiment_id,
+                "validation": "passed" if health else "connector not configured or unreachable",
+            }
+            if health and experiment_id:
+                try:
+                    result = connector.fetch_experiment(experiment_id)
+                    validation_result["normalized_data"] = result.data
+                    validation_result["source_metadata"] = result.source_metadata
+                except (ConnectorAuthError, ConnectorNotFoundError, InsufficientDataError, ConnectorError) as exc:
+                    validation_result["validation"] = f"failed: {exc}"
+            return validation_result
+
+        # Normal fetch
+        try:
+            result = connector.fetch_experiment(experiment_id)
+            normalized_data = result.data
+            source_metadata = result.source_metadata
+        except ConnectorAuthError as exc:
+            raise validation_error(
+                f"PostHog auth error: {exc}",
+                [FieldError(field="source", issue="Invalid or insufficient PostHog credentials")]
+            )
+        except ConnectorNotFoundError as exc:
+            raise validation_error(
+                f"Experiment '{experiment_id}' not found in PostHog",
+                [FieldError(field="experiment_id", issue=str(exc))]
+            )
+        except InsufficientDataError as exc:
+            raise validation_error(
+                str(exc),
+                [FieldError(field=f, issue=f"missing or invalid") for f in exc.missing_fields]
+            )
+        except ConnectorError as exc:
+            raise internal_error(f"Connector error ({exc.source}): {exc}")
+    else:
+        # No source — use input data directly
+        if dry_run:
+            # In dry_run without a source, just return validation passed
+            return {
+                "dry_run": True,
+                "connector_connected": None,
+                "source": None,
+                "validation": "passed (no connector used)",
+            }
+
+    # ── 2. Build decision input ───────────────────────────────────────────
+    if normalized_data is not None:
+        # Data already normalized from connector
+        input_data = normalized_data
+    else:
+        # Use explicit input fields (same as decide action)
+        input_data = {
+            k: v for k, v in params.items()
+            if k not in ("source", "experiment_id", "dry_run", "save", "notify", "compare_with", "samples", "action", "request_id")
+        }
+        # Allow nested input dict
+        if "input" in params:
+            input_data = {**params["input"], **input_data}
+
+    # ── 3. Run decision ────────────────────────────────────────────────────
+    decision_result = run_decision_workflow(input_data, samples=samples)
+    method = decision_result.selected_method
+    decision = decision_result.decision
+
+    # ── 4. Audit ────────────────────────────────────────────────────────────
+    internal = decision_result.internal_result
+    if internal is None:
+        audit_result = {"note": "no internal result available for audit"}
+    elif method == "ab_test":
+        audit_result = audit_ab_test(input_data, internal)
+    elif method == "did":
+        audit_result = audit_did(input_data, internal)
+    else:
+        audit_result = {"experiment_type": method, "note": "audit not yet implemented for this method"}
+
+    # ── 5. Save ─────────────────────────────────────────────────────────────
+    saved_result_id = None
+    if save:
+        result_json = json.dumps(internal) if isinstance(internal, dict) else internal
+        inputs_json = json.dumps(input_data)
+        mode = method
+        saved_result_id = _store_save(result_json, mode, inputs_json)
+
+    # ── 6. Notify webhook ────────────────────────────────────────────────────
+    if notify and decision in ("ship", "reject", "escalate"):
+        webhook_url = os.environ.get("AGENT_CAUSAL_WEBHOOK_URL")
+        if webhook_url:
+            statistics = {}
+            if internal and isinstance(internal, dict):
+                stats = internal.get("statistics", {})
+                if hasattr(stats, "model_dump"):
+                    statistics = stats.model_dump()
+                elif isinstance(stats, dict):
+                    statistics = stats
+
+            payload = build_webhook_payload(
+                decision=decision,
+                summary=decision_result.effect_summary,
+                method=method,
+                statistics=statistics,
+                result_id=str(saved_result_id) if saved_result_id else None,
+                timestamp=decision_result.timestamp,
+            )
+            fire_webhook(webhook_url, payload)
+
+    # ── 7. Compare with prior experiments ─────────────────────────────────
+    comparison_summary = None
+    if compare_with:
+        comparison = _store_compare(list(compare_with) + ([saved_result_id] if saved_result_id else []))
+        if "error" not in comparison:
+            comparison_summary = comparison
+
+    return {
+        "selected_method": method,
+        "decision_result": decision_result.model_dump() if hasattr(decision_result, "model_dump") else decision_result,
+        "audit_result": audit_result,
+        "saved_result_id": saved_result_id,
+        "comparison_summary": comparison_summary,
+        "source_metadata": source_metadata,
+    }
