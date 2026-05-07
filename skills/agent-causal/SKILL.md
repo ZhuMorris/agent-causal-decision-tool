@@ -314,19 +314,6 @@ PYTHONPATH=. python3 -m src.cli ab --control 100/5000 --variant 130/5000
 }
 ```
 
-### A/B Test Analysis (Frequentist)
-
-```bash
-cd ~/clawd/agent-causal-decision-tool
-PYTHONPATH=. python3 -m src.cli ab --control 100/5000 --variant 130/5000
-```
-
-**Parameters:**
-- `--control`: Control group conversions/total (e.g., `100/5000`)
-- `--variant`: Variant group conversions/total (e.g., `130/5000`)
-- `--name`: Variant name (optional, default: `variant_1`)
-- `--format`: Output format `json` (default) or `text`
-
 ### Bayesian A/B Test
 
 ```bash
