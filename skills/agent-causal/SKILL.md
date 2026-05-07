@@ -674,3 +674,41 @@ All output models include `schema_version` field injected from package metadata 
 - scipy >= 1.11.0
 - numpy >= 1.26.0
 - pydantic >= 2.10.0
+
+## External Connectors
+
+Fetch experiment data directly from external sources. The `connect` action normalizes external data into the internal experiment schema before running a decision.
+
+### PostHog
+
+```bash
+# Health check (validates credentials, no data fetched)
+PYTHONPATH=. python3 -m src.cli connect posthog --dry-run
+
+# Fetch experiment and print normalized data
+PYTHONPATH=. python3 -m src.cli connect posthog --experiment-id <id>
+
+# Fetch and run through decision workflow automatically
+PYTHONPATH=. python3 -m src.cli connect posthog --experiment-id <id> --decide
+
+# JSON-RPC call
+{"jsonrpc":"2.0","method":"connect","params":{"source":"posthog","experiment_id":"<id>"},"id":"1"}
+```
+
+**Environment / config:**
+- `POSTHOG_API_KEY` + `POSTHOG_PROJECT_ID` env vars, OR
+- `~/.posthogrc` with `api_key`, `project_id`, `instance_url` fields
+
+**Connector result schema:**
+```json
+{
+  "data": { "control_conversions": 120, "control_total": 5000, "variant_conversions": 145, "variant_total": 5000 },
+  "source_metadata": { "connector": "posthog", "experiment_id": "...", "fetch_timestamp": "..." },
+  "warnings": []
+}
+```
+
+**Errors:**
+- `INSUFFICIENT_DATA` — experiment found but missing required fields
+- `ConnectorAuthError` — invalid/missing API key
+- `ConnectorNotFoundError` — experiment not found

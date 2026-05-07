@@ -80,6 +80,7 @@ uvicorn src.api:app --port 8000
 | `save_result` | Persist a decision result to SQLite history |
 | `get_result` | Retrieve a stored result by ID |
 | `compare_results` | Compare multiple stored experiments |
+| `connect` | Fetch experiment data from external connectors (e.g. PostHog) |
 
 ### Request format
 
@@ -425,6 +426,48 @@ result = calculate_plan({
     "daily_traffic": 5000, "confidence_level": 0.95, "power": 0.8,
     "allocation": "equal", "allocation_ratio": None
 })
+```
+
+---
+
+## External Connectors (PostHog)
+
+Fetch experiment data directly from PostHog, normalize it, and run a decision — all in one step.
+
+```bash
+# Health check (validates credentials, no data fetched)
+PYTHONPATH=. python3 -m src.cli connect posthog --dry-run
+
+# Fetch and print normalized data
+PYTHONPATH=. python3 -m src.cli connect posthog --experiment-id <id>
+
+# Fetch and run through decision workflow
+PYTHONPATH=. python3 -m src.cli connect posthog --experiment-id <id> --decide
+
+# JSON-RPC call
+{"jsonrpc":"2.0","method":"connect","params":{"source":"posthog","experiment_id":"<id>"},"id":"1"}
+```
+
+**Authentication:**
+- `POSTHOG_API_KEY` + `POSTHOG_PROJECT_ID` env vars, OR
+- `~/.posthogrc` with `api_key`, `project_id`, `instance_url` fields
+
+**Connector result:**
+```json
+{
+  "data": {
+    "control_conversions": 120,
+    "control_total": 5000,
+    "variant_conversions": 145,
+    "variant_total": 5000
+  },
+  "source_metadata": {
+    "connector": "posthog",
+    "experiment_id": "...",
+    "fetch_timestamp": "..."
+  },
+  "warnings": []
+}
 ```
 
 ---
