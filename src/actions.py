@@ -24,6 +24,7 @@ from .ab_test import calculate_ab
 from .bayes import calculate_bayes_ab
 from .did import calculate_did
 from .planning import calculate_plan
+from .dispatcher import run_decision_workflow
 from .audit import audit_ab_test, audit_did
 from .store import save_experiment as _store_save, get_experiment as _store_get, compare_experiments as _store_compare
 from .unified import to_unified, AgentDecisionOutput
@@ -291,7 +292,13 @@ def _dispatch_action(action: str, params: dict) -> AgentDecisionOutput | list[di
                 comparison["error"],
                 [FieldError(field="experiment_ids", issue=comparison["error"])]
             )
-        return comparison
+        return compari    # decide: easy-mode dispatcher — auto-selects the right method
+    if action == "decide":
+        samples = params.get("samples", 20000)
+        input_data = params.get("input", params)
+        input_data = {k: v for k, v in input_data.items()
+                      if k not in ("mode", "samples", "action", "request_id")}
+        return run_decision_workflow(input_data, samples=samples)
 
     # Unknown action
     raise method_not_found(action)

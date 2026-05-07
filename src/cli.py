@@ -12,6 +12,7 @@ from src.planning import calculate_plan
 from src.bayes import calculate_bayes_ab, BayesOutput
 from src.audit import format_audit_text, check_experiment_maturity, audit_ab_test, audit_did
 from src.cohort import cohort_breakdown
+from src.dispatcher import run_decision_workflow
 from src import store
 
 
@@ -121,6 +122,117 @@ def ab_test(control, variant, name, output_format, auto_save, sequential_enabled
         click.echo(result_json)
     else:
         _print_ab_text(result)
+
+
+@main.command("decide")
+@click.option("--control", help="Control group: conversions/total (e.g., 100/5000)")
+@click.option("--variant", help="Variant group: conversions/total (e.g., 120/5000)")
+@click.option("--pre-control", "pre_control", type=float, help="DiD pre-period control metric")
+@click.option("--post-control", "post_control", type=float, help="DiD post-period control metric")
+@click.option("--pre-treated", "pre_treated", type=float, help="DiD pre-period treated metric")
+@click.option("--post-treated", "post_treated", type=float, help="DiD post-period treated metric")
+@click.option("--baseline", "baseline_conversion_rate", type=float, help="Planning: baseline conversion rate (e.g., 0.05)")
+@click.option("--mde", "mde_pct", type=float, help="Planning: minimum detectable effect in %% (e.g., 10)")
+@click.option("--traffic", "daily_traffic", type=int, help="Planning: daily traffic per arm")
+@click.option("--bayesian", "bayesian", is_flag=True, help="Force Bayesian A/B (auto-detected if absent)")
+@click.option("--format", "output_format", type=click.Choice(["json", "text"]), default="json")
+@click.option("--save", "auto_save", is_flag=True, help="Save result to experiment history")
+@click.option("--samples", default=20000, type=int, help="Monte Carlo samples for Bayesian (default: 20000)")
+def decide_cmd(control, variant, pre_control, post_control, pre_treated, post_treated,
+                baseline_conversion_rate, mde_pct, daily_traffic, bayesian,
+                output_format, auto_save, samples):
+    """Auto-detect and run the right decision method.
+
+    Detects method from provided flags:
+      A/B test     — --control + --variant
+      DiD          — --pre-control + --post-control + --pre-treated + --post-treated
+      Planning     — --baseline + --mde (+ --traffic)
+      Bayesian     — --bayesian flag (auto-detected if absent when using decide)
+    """
+
+    # Build input dict from provided flags
+    input_data = {}
+
+    # A/B fields
+    if control and variant:
+        try:
+            c_parts = control.split("/")
+            v_parts = variant.split("/")
+            input_data.update({
+                "control_conversions": int(c_parts[0]),
+                "control_total": int(c_parts[1]),
+                "variant_conversions": int(v_parts[0]),
+                "variant_total": int(v_parts[1]),
+            })
+        except (ValueError, IndexError) as e:
+            raise click.BadParameter(f"Invalid control/variant format: {e}. Use: --control 100/5000 --variant 120/5000")
+
+    # DiD fields — calculate_did expects scalar floats
+    if pre_control is not None and post_control is not None and pre_treated is not None and post_treated is not None:
+        try:
+            input_data.update({
+                "pre_control": float(pre_control),
+                "post_control": float(post_control),
+                "pre_treated": float(pre_treated),
+                "post_treated": float(post_treated),
+            })
+        except ValueError as e:
+            raise click.BadParameter(f"Invalid DiD format: {e}. Use floats: --pre-control 1000 --post-control 1200")
+
+    # Planning fields
+    if baseline_conversion_rate is not None and mde_pct is not None:
+        input_data.update({
+            "baseline_conversion_rate": baseline_conversion_rate,
+            "mde_pct": mde_pct,
+        })
+        if daily_traffic:
+            input_data["daily_traffic"] = daily_traffic
+
+    # Bayesian flag
+    if bayesian:
+        input_data["bayesian"] = True
+
+    if not input_data:
+        raise click.UsageException(
+            "No recognizable inputs provided. Use --control/--variant for A/B, "
+            "--pre-control/--post-control/--pre-treated/--post-treated for DiD, "
+            "or --baseline/--mde for planning."
+        )
+
+    result = run_decision_workflow(input_data, samples=samples)
+
+    if auto_save and result.internal_result:
+        result_json = json.dumps(result.internal_result, indent=2)
+        mode = result.selected_method
+        inputs_json = json.dumps(input_data)
+        row_id = store.save_experiment(result_json, mode, inputs_json)
+        click.echo(f"[Saved as experiment #{row_id}]", err=True)
+
+    if output_format == "json":
+        click.echo(result.model_dump_json(indent=2))
+    else:
+        click.echo(_print_unified_text(result))
+
+
+def _print_unified_text(result) -> str:
+    """Format AgentDecisionOutput as human-readable text."""
+    lines = [
+        f"Decision:     {result.decision.upper()}",
+        f"Method:        {result.selected_method} ({result.selection_reason})",
+        f"Confidence:    {result.confidence}",
+        f"Effect:        {result.effect_summary}",
+        f"Next action:   {result.recommended_next_action}",
+    ]
+    if result.warnings:
+        lines.append("Warnings:")
+        for w in result.warnings:
+            lines.append(f"  [{w.severity}] {w.code}: {w.message}")
+    if result.limitations:
+        lines.append("Limitations:")
+        for lim in result.limitations:
+            lines.append(f"  - {lim}")
+    lines.append(f"Audit: {result.audit_summary}")
+    return "\n".join(lines)
 
 
 @main.command("cohort-breakdown")
