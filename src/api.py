@@ -68,11 +68,24 @@ def run_stdio():
     Exits cleanly on EOF or broken pipe.
     """
     buffer = ""
+    line_count = 0
+    MAX_LINES = 1000
+    MAX_BUFFER_CHARS = 100_000
 
     try:
         while True:
             line = sys.stdin.readline()
             if not line:  # EOF
+                break
+
+            line_count += 1
+            if line_count > MAX_LINES or len(buffer) > MAX_BUFFER_CHARS:
+                # Unbounded input — abort rather than risk memory exhaustion
+                err_resp = {
+                    "jsonrpc": "2.0",
+                    "error": {"code": -32700, "message": "Parse error: malformed request"},
+                }
+                print(json.dumps(err_resp), flush=True)
                 break
 
             buffer += line
@@ -103,7 +116,7 @@ def run_stdio():
                 if not isinstance(params, dict):
                     err_resp = {
                         "jsonrpc": "2.0",
-                        "error": {"code": -32600, "message": "Invalid params: must be an object"},
+                        "error": {"code": -32602, "message": "Invalid params: must be an object"},
                         "id": request_id,
                     }
                     if request_id is not None:
