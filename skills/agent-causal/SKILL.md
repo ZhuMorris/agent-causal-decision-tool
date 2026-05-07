@@ -87,19 +87,6 @@ After this, `agent-causal` is available as a local command. No further network a
 
 ---
 
-## When to Use It
-
-Use this skill whenever you or your agents have experiment or rollout results and need a decision you can defend:
-
-- You ran an A/B test and want to know whether to ship, keep running, or reject the variant.
-- You're not sure which method to use — let `decide` auto-detect from your numbers.
-- You ran an A/B test and it was inconclusive — you want to know if a specific user segment is driving (or diluting) the effect.
-- You did a staged / regional rollout and want a DiD estimate of impact vs a similar control group.
-- You prefer a Bayesian summary ("95% chance B is better; expected lift 3–5%") to drive thresholds in automated workflows.
-- You need an audit trail with period, traffic, assumptions, thresholds, and warnings for product/data/risk review.
-- You want to plan an experiment (sample size, MDE, duration) or compare current results to previous experiments.
-- You want to **stop an A/B test early** when evidence is overwhelmingly strong (sequential early stopping), without losing audit integrity.
-
 ## Agent-Native Actions (JSON-RPC 2.0)
 
 For AI agent integrations, Agent Causal exposes a JSON-RPC 2.0 API over both stdio and HTTP.
