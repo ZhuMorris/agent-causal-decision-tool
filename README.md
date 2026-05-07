@@ -208,7 +208,6 @@ PYTHONPATH=. python3 -m src.cli decide --baseline 0.05 --mde 10 --traffic 10000
 | `--control` + `--variant` + `--bayesian` | Bayesian A/B |
 | `--pre-control` + `--post-control` + `--pre-treated` + `--post-treated` | DiD (Difference-in-Differences) |
 | `--baseline` + `--mde` | Experiment planning |
-| `--segments` or `--cohort-breakdown` | Cohort / segment breakdown |
 
 ---
 
