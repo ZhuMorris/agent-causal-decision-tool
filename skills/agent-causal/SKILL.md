@@ -4,7 +4,7 @@ description: "Agent Causal Decision Tool helps you and your AI agents answer one
 metadata:
   openclaw:
     category: data-science
-    version: "0.10.2"
+    version: "0.10.3"
     license: Apache-2.0
     tools: [exec]
     requires:
@@ -64,9 +64,9 @@ This skill runs as a **local CLI tool only**. After one-time setup, it requires 
 **Setup (one-time, before first use):**
 ```bash
 # Download the release tarball — no git clone needed
-curl -sL https://github.com/ZhuMorris/agent-causal-decision-tool/archive/refs/tags/v0.10.1.tar.gz -o agent-causal.tar.gz
+curl -sL https://github.com/ZhuMorris/agent-causal-decision-tool/archive/refs/tags/v0.10.2.tar.gz -o agent-causal.tar.gz
 tar -xzf agent-causal.tar.gz
-pip install agent-causal-decision-tool-0.10.1/ -q
+pip install agent-causal-decision-tool-0.10.2/ -q
 ```
 
 
