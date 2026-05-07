@@ -59,18 +59,29 @@ Use this tool whenever you or your agents have experiment or rollout results and
 
 ## Security Model
 
-This skill runs as a local CLI tool only — no code is fetched from remote at runtime.
+This skill runs as a **local CLI tool only**. After one-time setup, it requires no network access.
 
 **Setup (one-time, before first use):**
 ```bash
-# Clone once to local disk — no runtime network access needed
+# Download the release tarball — no git clone needed
+curl -sL https://github.com/ZhuMorris/agent-causal-decision-tool/archive/refs/tags/v0.10.0.tar.gz -o agent-causal.tar.gz
+tar -xzf agent-causal.tar.gz
+pip install agent-causal-decision-tool-0.10.0/ -q
+
+# Or clone once and install from local path (if you already have the repo):
 git clone https://github.com/ZhuMorris/agent-causal-decision-tool.git ~/clawd/agent-causal-decision-tool
 pip install ~/clawd/agent-causal-decision-tool -q
 ```
 
-After installation, the `agent-causal` command is available locally. The skill itself only reads your experiment data and runs local statistical calculations — it does not fetch code, pull external dependencies at runtime, or make outbound network requests during analysis.
 
-**Tools used:** `exec` (for running the `agent-causal` CLI commands you specify). No subprocess spawning with unsanitized input.
+After installation, the `agent-causal` command is available locally. The skill itself only reads your experiment data and runs local statistical calculations.
+
+**No runtime network access.** The tool does not fetch code, pull external dependencies at runtime, or make outbound network requests during analysis.
+
+**Tools used:** `exec` (for running the `agent-causal` CLI commands you specify). Commands are fully hardcoded with no user-supplied strings interpolated into shell execution.
+
+
+**Credential handling:** PostHog API credentials are read from env vars (`POSTHOG_API_KEY`/`POSTHOG_PROJECT_ID`) or a local `~/.posthogrc` file — never hardcoded or logged.
 
 ---
 
