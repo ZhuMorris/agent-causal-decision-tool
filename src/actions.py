@@ -157,7 +157,7 @@ def run_action(action: str, params: dict, request_id: Optional[str] = None) -> d
     """Run an agent action and return a JSON-RPC success or error response dict.
 
     Args:
-        action: One of the 7 supported actions
+        action: One of the 9 supported actions
         params: Dict of action parameters
         request_id: Optional request ID for tracking
 
